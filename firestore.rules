@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+
+    function isAmin() {
+      return isRole('amin') || (request.auth.token.email == "amriahassan@gmail.com" && request.auth.token.email_verified == true);
+    }
+
+    function isMukallaf() {
+      return isRole('mukallaf');
+    }
+
+    function isStaff() {
+      return isAmin() || isMukallaf();
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Data Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.email is string &&
+             data.role in ['mukallaf', 'amin'] &&
+             (!('balance' in data) || data.balance is number);
+    }
+
+    function isValidSubscriber(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('subscriptionFeePaid' in data) || data.subscriptionFeePaid is number) &&
+             (!('balance' in data) || data.balance is number);
+    }
+
+    function isValidSession(data) {
+      return data.subscriberId is string &&
+             data.hours is number && data.hours > 0 &&
+             data.totalAmount is number &&
+             data.status in ['paid', 'cancelled'] &&
+             data.collectedBy is string;
+    }
+
+    function isValidExpense(data) {
+      return data.description is string && data.description.size() > 0 &&
+             data.amount is number && data.amount > 0 &&
+             data.date is string;
+    }
+
+    function isValidTransfer(data) {
+      return data.fromUid is string &&
+             data.toUid is string &&
+             data.amount is number && data.amount > 0;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+    match /settings/{id} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAmin();
+    }
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == uid && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid == uid || isAmin()) && isValidUser(request.resource.data);
+    }
+
+    match /subscribers/{id} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff() && isValidSubscriber(request.resource.data);
+      allow delete: if isAmin();
+    }
+
+    match /sessions/{id} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff() && isValidSession(request.resource.data);
+      allow delete: if isAmin();
+    }
+
+    match /expenses/{id} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff() && isValidExpense(request.resource.data);
+      allow delete: if isAmin();
+    }
+
+    match /transfers/{id} {
+      allow read: if isAuthenticated();
+      allow create: if isStaff() && isValidTransfer(request.resource.data);
+      allow update: if isAmin();
+      allow delete: if isAmin();
+    }
+  }
+}

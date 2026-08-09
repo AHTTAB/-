@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user with role and balance",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["mukallaf", "amin"] },
+        "displayName": { "type": "string" },
+        "balance": { "type": "number", "description": "Cash currently held by this user" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Association member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "subscriptionDate": { "type": "string", "format": "date-time" },
+        "subscriptionFeePaid": { "type": "number" },
+        "balance": { "type": "number" }
+      },
+      "required": ["name"]
+    },
+    "IrrigationSession": {
+      "title": "Irrigation Session",
+      "description": "Record of irrigation hours and payment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subscriberId": { "type": "string" },
+        "subscriberName": { "type": "string" },
+        "hours": { "type": "number" },
+        "rate": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "workerWage": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["paid", "cancelled"] },
+        "collectedBy": { "type": "string", "description": "UID of user who collected money" },
+        "receiptNumber": { "type": "string" }
+      },
+      "required": ["subscriberId", "hours", "totalAmount", "status"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Association expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "addedBy": { "type": "string" }
+      },
+      "required": ["description", "amount", "date"]
+    },
+    "Transfer": {
+      "title": "Transfer",
+      "description": "Money transfer between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fromUid": { "type": "string" },
+        "toUid": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUid", "toUid", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profiles and roles" },
+    "/subscribers/{id}": { "schema": "Subscriber", "description": "List of members" },
+    "/sessions/{id}": { "schema": "IrrigationSession", "description": "Irrigation records" },
+    "/expenses/{id}": { "schema": "Expense", "description": "Spending records" },
+    "/transfers/{id}": { "schema": "Transfer", "description": "Internal cash transfers" }
+  }
+}
