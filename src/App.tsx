@@ -50,7 +50,8 @@ import {
   AlertCircle,
   CheckCircle,
   Lock,
-  Shield
+  Shield,
+  Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -875,7 +876,7 @@ export default function App() {
             {isTabAllowed('reports') && activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
             {isTabAllowed('transfers') && activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
             {isTabAllowed('activity') && activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
-            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} /></div>}
+            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} profile={profile} /></div>}
           </AnimatePresence>
 
           <ConfirmModal 
@@ -2014,13 +2015,17 @@ const ALL_APP_SECTIONS = [
   { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
 ];
 
-function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: boolean, key?: string }) {
+function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, key?: string }) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
   const [signatureUrl, setSignatureUrl] = useState(user.signatureUrl || '');
   const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const isSelf = currentUser?.uid === user.uid;
+  const canEditProfile = isAmin || isSelf;
+  const canEditRoleAndTabs = isAmin;
 
   useEffect(() => {
     setDisplayName(user.displayName || '');
@@ -2030,16 +2035,19 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
   }, [user.uid, user.displayName, user.role, user.signatureUrl, JSON.stringify(user.allowedTabs)]);
 
   const toggleTab = (tabId: string) => {
+    if (!canEditRoleAndTabs) return;
     setAllowedTabs(prev => 
       prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]
     );
   };
 
   const selectAll = () => {
+    if (!canEditRoleAndTabs) return;
     setAllowedTabs(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   };
 
   const deselectAll = () => {
+    if (!canEditRoleAndTabs) return;
     setAllowedTabs([]);
   };
 
@@ -2071,7 +2079,7 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
             <label className="block text-xs font-bold text-stone-600 mb-1">الاسم الكامل في التطبيق</label>
             <input 
               type="text" 
-              disabled={!isAmin}
+              disabled={!canEditProfile}
               value={displayName} 
               onChange={(e) => setDisplayName(e.target.value)}
               className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full disabled:bg-stone-100"
@@ -2090,7 +2098,7 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
           <div>
             <label className="block text-xs font-bold text-stone-600 mb-1">الصفة / الدور</label>
             <select 
-              disabled={!isAmin}
+              disabled={!canEditRoleAndTabs}
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
               className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-bold text-stone-800 w-full disabled:bg-stone-100"
@@ -2101,37 +2109,60 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
             </select>
           </div>
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">رابط صورة التوقيع (للوصل)</label>
+            <label className="block text-xs font-bold text-stone-600 mb-1">صورة التوقيع (للطباعة في الوصل)</label>
             <div className="flex items-center gap-2">
               <input 
-                type="url" 
-                disabled={!isAmin}
+                type="text" 
+                disabled={!canEditProfile}
                 value={signatureUrl} 
                 onChange={(e) => setSignatureUrl(e.target.value)}
                 className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-mono text-xs dir-ltr text-stone-800 w-full disabled:bg-stone-100"
-                placeholder="https://.../sig.png"
+                placeholder="رابط أو اختر صورة"
               />
+              {canEditProfile && (
+                <label className="cursor-pointer px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1.5 transition-colors">
+                  <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>رفع صورة</span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          if (event.target?.result) {
+                            setSignatureUrl(event.target.result as string);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden" 
+                  />
+                </label>
+              )}
               {signatureUrl && (
                 <img 
                   src={signatureUrl} 
                   referrerPolicy="no-referrer"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   alt="توقيع" 
-                  className="w-9 h-9 object-contain border border-stone-300 rounded bg-white shrink-0 p-0.5" 
+                  className="w-9 h-9 object-contain border border-stone-300 rounded-xl bg-white shrink-0 p-0.5 shadow-2xs" 
                 />
               )}
             </div>
           </div>
         </div>
 
-        {isAmin && (
+        {canEditProfile && (
           <button 
             onClick={handleUpdate}
             disabled={saving}
             className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
               savedSuccess 
                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer'
             }`}
           >
             {saving ? 'جاري الحفظ...' : savedSuccess ? (
@@ -2140,7 +2171,7 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
                 تم الحفظ
               </>
             ) : (
-              'حفظ التغييرات والصلاحيات'
+              'حفظ التوقيع والبيانات'
             )}
           </button>
         )}
@@ -2153,7 +2184,7 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
             <Lock className="w-3.5 h-3.5 text-stone-500" />
             الأقسام المسموح بظهورها لهذا المستخدم في القائمة:
           </span>
-          {role !== 'amin' && isAmin && (
+          {role !== 'amin' && canEditRoleAndTabs && (
             <div className="flex items-center gap-2">
               <button 
                 type="button" 
@@ -2186,7 +2217,7 @@ function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: bool
                 <button
                   key={section.id}
                   type="button"
-                  disabled={!isAmin}
+                  disabled={!canEditRoleAndTabs}
                   onClick={() => toggleTab(section.id)}
                   className={`p-2.5 rounded-xl border text-right transition-all flex items-center gap-2 ${
                     isChecked
@@ -2218,9 +2249,9 @@ function UserManagementView({ users, profile }: { users: UserProfile[], profile?
         <div>
           <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
             إدارة المستخدمين والأقسام والصلاحيات والتواقيع
-            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة أمين المال</span>
+            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة المستخدمين</span>
           </h3>
-          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين، إرفاق روابط توقيعهم لطباعتها في الوصل، وإعطاء صلاحية التحكم في الأقسام الظاهرة.</p>
+          <p className="text-sm text-stone-500 mt-1">يمكنك رفع صورة توقيعك أو كتابة رابط التوقيع ليظهر تلقائياً في وصل الاستلام والمستندات الرسمية.</p>
         </div>
         <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700">
           إجمالي المستخدمين: {users.length}
@@ -2229,7 +2260,7 @@ function UserManagementView({ users, profile }: { users: UserProfile[], profile?
 
       <div className="space-y-4">
         {users.map(u => (
-          <UserRowItem key={u.uid} user={u} isAmin={isAmin} />
+          <UserRowItem key={u.uid} user={u} currentUser={profile} isAmin={isAmin} />
         ))}
         {users.length === 0 && (
           <p className="p-8 text-center text-stone-400 bg-stone-50 rounded-2xl border border-stone-200">لا يوجد مستخدمون مسجلون بعد</p>
