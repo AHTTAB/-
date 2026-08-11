@@ -40,6 +40,7 @@ service cloud.firestore {
              (!('role' in data) || data.role in ['mukallaf', 'amin', 'rais']) &&
              (!('displayName' in data) || data.displayName is string) &&
              (!('allowedTabs' in data) || data.allowedTabs is list) &&
+             (!('signatureUrl' in data) || data.signatureUrl is string) &&
              (!('balance' in data) || data.balance is number);
     }
 

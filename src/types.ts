@@ -7,6 +7,7 @@ export interface UserProfile {
   displayName: string;
   balance: number;
   allowedTabs?: string[];
+  signatureUrl?: string;
 }
 
 export interface Subscriber {

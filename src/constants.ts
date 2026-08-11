@@ -5,6 +5,7 @@ import { db } from './firebase';
 export let SUBSCRIPTION_FEE = 300;
 export let IRRIGATION_RATE = 45;
 export let WORKER_WAGE_PER_HOUR = 12;
+export let ASSOCIATION_SIGNATURE_URL = '';
 
 export const loadSettings = async () => {
   try {
@@ -14,21 +15,29 @@ export const loadSettings = async () => {
       SUBSCRIPTION_FEE = data.subscriptionFee || 300;
       IRRIGATION_RATE = data.irrigationRate || 45;
       WORKER_WAGE_PER_HOUR = data.workerWagePerHour || 12;
+      ASSOCIATION_SIGNATURE_URL = data.associationSignatureUrl || '';
     }
   } catch (err) {
     console.warn("Could not load settings:", err);
   }
 };
 
-export const saveSettings = async (subscriptionFee: number, irrigationRate: number, workerWagePerHour: number) => {
+export const saveSettings = async (
+  subscriptionFee: number, 
+  irrigationRate: number, 
+  workerWagePerHour: number,
+  associationSignatureUrl: string = ''
+) => {
   await setDoc(doc(db, 'settings', 'config'), {
     subscriptionFee,
     irrigationRate,
-    workerWagePerHour
-  });
+    workerWagePerHour,
+    associationSignatureUrl
+  }, { merge: true });
   SUBSCRIPTION_FEE = subscriptionFee;
   IRRIGATION_RATE = irrigationRate;
   WORKER_WAGE_PER_HOUR = workerWagePerHour;
+  ASSOCIATION_SIGNATURE_URL = associationSignatureUrl;
 };
 
 export const formatCurrency = (amount: number) => {

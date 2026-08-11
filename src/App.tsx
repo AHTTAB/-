@@ -69,6 +69,7 @@ import {
   SUBSCRIPTION_FEE, 
   IRRIGATION_RATE, 
   WORKER_WAGE_PER_HOUR, 
+  ASSOCIATION_SIGNATURE_URL,
   formatCurrency, 
   formatDate,
   loadSettings,
@@ -131,12 +132,17 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscription' | 'irrigation' }>(({ data, type }, ref) => {
   const receiptNo = data.receiptNumber || (type === 'subscription' ? `SUB-${(data.id || '000000').slice(-6).toUpperCase()}` : `IRR-${(data.id || '000000').slice(-6).toUpperCase()}`);
+  const collectorSignature = data.collectorSignatureUrl || data.collectorSignature;
+  const assocSignature = data.associationSignatureUrl || ASSOCIATION_SIGNATURE_URL;
+  const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpg` : '/logo.jpg';
+
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-4 max-w-md mx-auto" dir="rtl">
       <div className="text-center border-b-2 border-emerald-600 pb-4 mb-4 flex flex-col items-center">
         <img 
-          src="/logo.jpg" 
-          onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+          src={logoUrl} 
+          referrerPolicy="no-referrer"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }} 
           alt="لوجو الجمعية" 
           className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" 
         />
@@ -188,14 +194,36 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
       </div>
       
       <div className="mt-8 flex justify-between items-end pt-4 border-t border-stone-200">
-        <div className="text-center">
+        <div className="text-center flex flex-col items-center">
           <p className="text-xs font-bold text-stone-600 mb-2">توقيع المكلف / أمين المال</p>
-          <div className="w-28 h-16 border border-dashed border-stone-300 rounded-lg"></div>
+          <div className="w-28 h-16 border border-dashed border-stone-300 rounded-lg flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
+            {collectorSignature ? (
+              <img 
+                src={collectorSignature} 
+                alt="توقيع المكلف" 
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-full object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <span className="text-[10px] text-stone-400">توقيع المكلف</span>
+            )}
+          </div>
         </div>
-        <div className="text-center">
+        <div className="text-center flex flex-col items-center">
           <p className="text-xs font-bold text-stone-600 mb-2">خاتم الجمعية</p>
-          <div className="w-20 h-20 rounded-full border border-dashed border-stone-300 flex items-center justify-center">
-            <span className="text-[9px] text-stone-400">خاتم الجمعية</span>
+          <div className="w-20 h-20 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
+            {assocSignature ? (
+              <img 
+                src={assocSignature} 
+                alt="خاتم الجمعية" 
+                referrerPolicy="no-referrer"
+                className="max-w-full max-h-full object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <span className="text-[9px] text-stone-400">خاتم الجمعية</span>
+            )}
           </div>
         </div>
       </div>
@@ -220,14 +248,16 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
   totalExpenses: number, 
   netBalance: number 
 }>(({ startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalWorkerWagesConfirmed, expensesList, totalExpenses, netBalance }, ref) => {
+  const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpg` : '/logo.jpg';
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans max-w-4xl mx-auto border-2 border-stone-200" dir="rtl">
       {/* Report Header */}
       <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-6 mb-6">
         <div className="flex items-center gap-4">
           <img 
-            src="/logo.jpg" 
-            onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+            src={logoUrl} 
+            referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} 
             alt="لوجو الجمعية" 
             className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" 
           />
@@ -590,7 +620,8 @@ export default function App() {
         >
           <img 
             src="/logo.jpg" 
-            onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+            referrerPolicy="no-referrer"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} 
             alt="لوجو الجمعية" 
             className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" 
           />
@@ -683,7 +714,8 @@ export default function App() {
             <div className="flex items-center gap-3">
               <img 
                 src="/logo.jpg" 
-                onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} 
                 alt="لوجو الجمعية" 
                 className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
               />
@@ -805,7 +837,8 @@ export default function App() {
             </button>
             <img 
               src="/logo.jpg" 
-              onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+              referrerPolicy="no-referrer"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }} 
               alt="لوجو الجمعية" 
               className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
             />
@@ -982,7 +1015,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode, label:
   );
 }
 
-function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], profile: UserProfile }) {
+function SubscribersView({ subscribers, profile, users }: { subscribers: Subscriber[], profile: UserProfile, users?: UserProfile[] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
@@ -1024,7 +1057,13 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
       setNationalId('');
       setIsAdding(false);
       
-      setSelectedSubscriber({ id: docRef.id, ...newSub, collectorName: profile.displayName } as Subscriber & { collectorName?: string });
+      const collectorUser = users?.find(u => u.uid === profile.uid) || profile;
+      setSelectedSubscriber({ 
+        id: docRef.id, 
+        ...newSub, 
+        collectorName: profile.displayName,
+        collectorSignatureUrl: collectorUser.signatureUrl
+      } as any);
       setTimeout(() => handlePrint(), 400);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'subscribers');
@@ -1180,7 +1219,16 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
                         <Settings className="w-5 h-5" />
                       </button>
                       <button 
-                        onClick={() => {setSelectedSubscriber({ ...sub, receiptNumber: subReceiptNo, collectorName: profile.displayName }); setTimeout(() => handlePrint(), 100);}}
+                        onClick={() => {
+                          const collectorUser = users?.find(u => u.uid === (sub.createdBy || profile.uid)) || profile;
+                          setSelectedSubscriber({ 
+                            ...sub, 
+                            receiptNumber: subReceiptNo, 
+                            collectorName: collectorUser.displayName || profile.displayName,
+                            collectorSignatureUrl: collectorUser.signatureUrl
+                          } as any); 
+                          setTimeout(() => handlePrint(), 100);
+                        }}
                         className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
                         title="طباعة الوصل"
                       >
@@ -1407,7 +1455,12 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm, users }: 
       setSelectedSubId('');
       setIsAdding(false);
       
-      setSelectedSession({ id: docRef.id, ...newSession } as IrrigationSession);
+      setSelectedSession({ 
+        id: docRef.id, 
+        ...newSession, 
+        collectorName: profile.displayName,
+        collectorSignatureUrl: (users?.find(u => u.uid === profile.uid) || profile).signatureUrl
+      } as any);
       setTimeout(() => handlePrint(), 500);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'sessions');
@@ -1487,7 +1540,15 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm, users }: 
                     </td>
                     <td className="px-6 py-4 flex items-center gap-2">
                       <button 
-                        onClick={() => {setSelectedSession({ ...session, collectorName } as any); setTimeout(() => handlePrint(), 100);}}
+                        onClick={() => {
+                          const collectorUser = users?.find(u => u.uid === session.collectedBy) || profile;
+                          setSelectedSession({ 
+                            ...session, 
+                            collectorName, 
+                            collectorSignatureUrl: collectorUser.signatureUrl 
+                          } as any); 
+                          setTimeout(() => handlePrint(), 100);
+                        }}
                         className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
                         title="طباعة"
                       >
@@ -1953,9 +2014,10 @@ const ALL_APP_SECTIONS = [
   { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
 ];
 
-function UserRowItem({ user }: { user: UserProfile, key?: string }) {
+function UserRowItem({ user, isAmin = true }: { user: UserProfile, isAmin?: boolean, key?: string }) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
+  const [signatureUrl, setSignatureUrl] = useState(user.signatureUrl || '');
   const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -1963,8 +2025,9 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
   useEffect(() => {
     setDisplayName(user.displayName || '');
     setRole(user.role || 'mukallaf');
+    setSignatureUrl(user.signatureUrl || '');
     setAllowedTabs(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
-  }, [user.uid, user.displayName, user.role, JSON.stringify(user.allowedTabs)]);
+  }, [user.uid, user.displayName, user.role, user.signatureUrl, JSON.stringify(user.allowedTabs)]);
 
   const toggleTab = (tabId: string) => {
     setAllowedTabs(prev => 
@@ -1987,6 +2050,7 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: displayName.trim(),
         role: role,
+        signatureUrl: signatureUrl.trim(),
         allowedTabs: role === 'amin' ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] : allowedTabs
       });
       setSavedSuccess(true);
@@ -2002,14 +2066,15 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
   return (
     <div className="bg-stone-50/90 p-6 rounded-2xl border border-stone-200 space-y-4">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
           <div>
             <label className="block text-xs font-bold text-stone-600 mb-1">الاسم الكامل في التطبيق</label>
             <input 
               type="text" 
+              disabled={!isAmin}
               value={displayName} 
               onChange={(e) => setDisplayName(e.target.value)}
-              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full"
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full disabled:bg-stone-100"
               placeholder="اسم المستخدم"
             />
           </div>
@@ -2025,35 +2090,60 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
           <div>
             <label className="block text-xs font-bold text-stone-600 mb-1">الصفة / الدور</label>
             <select 
+              disabled={!isAmin}
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
-              className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-bold text-stone-800 w-full"
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-bold text-stone-800 w-full disabled:bg-stone-100"
             >
               <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
               <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
               <option value="mukallaf">مكلف بالتحصيل والسقي</option>
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">رابط صورة التوقيع (للوصل)</label>
+            <div className="flex items-center gap-2">
+              <input 
+                type="url" 
+                disabled={!isAmin}
+                value={signatureUrl} 
+                onChange={(e) => setSignatureUrl(e.target.value)}
+                className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-mono text-xs dir-ltr text-stone-800 w-full disabled:bg-stone-100"
+                placeholder="https://.../sig.png"
+              />
+              {signatureUrl && (
+                <img 
+                  src={signatureUrl} 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  alt="توقيع" 
+                  className="w-9 h-9 object-contain border border-stone-300 rounded bg-white shrink-0 p-0.5" 
+                />
+              )}
+            </div>
+          </div>
         </div>
 
-        <button 
-          onClick={handleUpdate}
-          disabled={saving}
-          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
-            savedSuccess 
-              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-          }`}
-        >
-          {saving ? 'جاري الحفظ...' : savedSuccess ? (
-            <>
-              <CheckCircle className="w-4 h-4" />
-              تم الحفظ
-            </>
-          ) : (
-            'حفظ التغييرات والصلاحيات'
-          )}
-        </button>
+        {isAmin && (
+          <button 
+            onClick={handleUpdate}
+            disabled={saving}
+            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
+              savedSuccess 
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+            }`}
+          >
+            {saving ? 'جاري الحفظ...' : savedSuccess ? (
+              <>
+                <CheckCircle className="w-4 h-4" />
+                تم الحفظ
+              </>
+            ) : (
+              'حفظ التغييرات والصلاحيات'
+            )}
+          </button>
+        )}
       </div>
 
       {/* Section Permissions Selector */}
@@ -2063,7 +2153,7 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
             <Lock className="w-3.5 h-3.5 text-stone-500" />
             الأقسام المسموح بظهورها لهذا المستخدم في القائمة:
           </span>
-          {role !== 'amin' && (
+          {role !== 'amin' && isAmin && (
             <div className="flex items-center gap-2">
               <button 
                 type="button" 
@@ -2096,6 +2186,7 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
                 <button
                   key={section.id}
                   type="button"
+                  disabled={!isAmin}
                   onClick={() => toggleTab(section.id)}
                   className={`p-2.5 rounded-xl border text-right transition-all flex items-center gap-2 ${
                     isChecked
@@ -2119,16 +2210,17 @@ function UserRowItem({ user }: { user: UserProfile, key?: string }) {
   );
 }
 
-function UserManagementView({ users }: { users: UserProfile[] }) {
+function UserManagementView({ users, profile }: { users: UserProfile[], profile?: UserProfile }) {
+  const isAmin = profile?.role === 'amin';
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
         <div>
           <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            إدارة المستخدمين والأقسام والصلاحيات
+            إدارة المستخدمين والأقسام والصلاحيات والتواقيع
             <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة أمين المال</span>
           </h3>
-          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين وإعطاء صلاحية التحكم في الأقسام الظاهرة لكل مستخدم.</p>
+          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين، إرفاق روابط توقيعهم لطباعتها في الوصل، وإعطاء صلاحية التحكم في الأقسام الظاهرة.</p>
         </div>
         <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700">
           إجمالي المستخدمين: {users.length}
@@ -2137,7 +2229,7 @@ function UserManagementView({ users }: { users: UserProfile[] }) {
 
       <div className="space-y-4">
         {users.map(u => (
-          <UserRowItem key={u.uid} user={u} />
+          <UserRowItem key={u.uid} user={u} isAmin={isAmin} />
         ))}
         {users.length === 0 && (
           <p className="p-8 text-center text-stone-400 bg-stone-50 rounded-2xl border border-stone-200">لا يوجد مستخدمون مسجلون بعد</p>
@@ -2145,11 +2237,11 @@ function UserManagementView({ users }: { users: UserProfile[] }) {
       </div>
 
       <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs text-stone-600">
-        <p className="font-bold text-stone-800 text-sm mb-1">دليل الأدوار والصلاحيات:</p>
+        <p className="font-bold text-stone-800 text-sm mb-1">دليل الأدوار والصلاحيات والتوقيع:</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-emerald-800 block mb-1">أمين المال (المسؤول)</span>
-            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات بقية الأعضاء.
+            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات ورابط توقيع الأعضاء.
           </div>
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-blue-800 block mb-1">رئيس الجمعية</span>
@@ -2200,15 +2292,23 @@ function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: 
   );
 }
 
-function SettingsView({ users }: { users: UserProfile[] }) {
+function SettingsView({ users, profile }: { users: UserProfile[], profile?: UserProfile }) {
   const [subFee, setSubFee] = useState(SUBSCRIPTION_FEE);
   const [irrRate, setIrrRate] = useState(IRRIGATION_RATE);
   const [workerWage, setWorkerWage] = useState(WORKER_WAGE_PER_HOUR);
+  const [assocSignature, setAssocSignature] = useState(ASSOCIATION_SIGNATURE_URL);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setSubFee(SUBSCRIPTION_FEE);
+    setIrrRate(IRRIGATION_RATE);
+    setWorkerWage(WORKER_WAGE_PER_HOUR);
+    setAssocSignature(ASSOCIATION_SIGNATURE_URL);
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
-    await saveSettings(subFee, irrRate, workerWage);
+    await saveSettings(subFee, irrRate, workerWage, assocSignature.trim());
     setSaving(false);
     alert('تم حفظ الإعدادات بنجاح');
   };
@@ -2216,7 +2316,7 @@ function SettingsView({ users }: { users: UserProfile[] }) {
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6 max-w-lg">
-        <h3 className="text-xl font-bold text-stone-900">إعدادات الجمعية</h3>
+        <h3 className="text-xl font-bold text-stone-900">إعدادات الجمعية والتوقيع الرسمية</h3>
         <div>
           <label className="block text-sm font-bold text-stone-700 mb-2">ثمن الاشتراك السنوي (درهم)</label>
           <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={subFee} onChange={(e) => setSubFee(Number(e.target.value))} />
@@ -2229,6 +2329,28 @@ function SettingsView({ users }: { users: UserProfile[] }) {
           <label className="block text-sm font-bold text-stone-700 mb-2">أجرة العامل في الساعة (درهم)</label>
           <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={workerWage} onChange={(e) => setWorkerWage(Number(e.target.value))} />
         </div>
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">رابط صورة توقيع / خاتم الجمعية (للطباعة في الوصل)</label>
+          <input 
+            type="url" 
+            className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl dir-ltr font-mono text-xs" 
+            placeholder="https://.../stamp.png"
+            value={assocSignature} 
+            onChange={(e) => setAssocSignature(e.target.value)} 
+          />
+          {assocSignature && (
+            <div className="mt-2 p-2 bg-stone-50 border border-stone-200 rounded-xl flex items-center gap-3">
+              <img 
+                src={assocSignature} 
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                alt="خاتم الجمعية" 
+                className="h-12 w-12 object-contain border border-stone-300 rounded p-1 bg-white" 
+              />
+              <span className="text-xs text-stone-500 font-medium">معاينة خاتم/توقيع الجمعية الرسمية</span>
+            </div>
+          )}
+        </div>
         <button 
           onClick={handleSave}
           disabled={saving}
@@ -2237,7 +2359,7 @@ function SettingsView({ users }: { users: UserProfile[] }) {
           {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
         </button>
       </motion.div>
-      <UserManagementView users={users} />
+      <UserManagementView users={users} profile={profile} />
     </div>
   );
 }
