@@ -58,7 +58,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import React, { useEffect, useState, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
-import { auth, db } from './firebase';
+import { auth, db, createNewUserAccount } from './firebase';
 import { 
   UserProfile, 
   Subscriber, 
@@ -631,7 +631,6 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   
   // Modal State
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void }>({
@@ -663,16 +662,25 @@ export default function App() {
         if (userDoc.exists()) {
           setProfile(userDoc.data() as UserProfile);
         } else {
-          // Default to mukallaf for first user or handle role selection
-          const newProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            role: firebaseUser.email === 'amriahassan@gmail.com' ? 'amin' : 'mukallaf',
-            displayName: firebaseUser.displayName || 'مستخدم جديد',
-            balance: 0
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
-          setProfile(newProfile);
+          // If primary owner email, auto-create admin profile
+          if (firebaseUser.email?.toLowerCase() === 'amriahassan@gmail.com') {
+            const newProfile: UserProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              role: 'amin',
+              displayName: firebaseUser.displayName || 'أمين المال (المسؤول)',
+              balance: 0,
+              allowedTabs: ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']
+            };
+            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+            setProfile(newProfile);
+          } else {
+            // Account was deleted by admin or not authorized
+            await signOut(auth);
+            setUser(null);
+            setProfile(null);
+            setAuthError('عذراً، هذا الحساب غير مصرح له أو تم إلغاؤه من طرف الإدارة.');
+          }
         }
       } else {
         setProfile(null);
@@ -750,38 +758,17 @@ export default function App() {
     }
   }, [profile?.role, JSON.stringify(profile?.allowedTabs), activeTab]);
 
-  const handleLogin = async () => {
-    try {
-      setAuthError('');
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Login error:', error);
-      setAuthError('حدث خطأ أثناء تسجيل الدخول بجوجل.');
-    }
-  };
-
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     try {
-      if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
       console.error('Auth error:', error);
       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         setAuthError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
-      } else if (error.code === 'auth/email-already-in-use') {
-        setAuthError('البريد الإلكتروني مستخدم بالفعل');
-      } else if (error.code === 'auth/weak-password') {
-        setAuthError('كلمة المرور ضعيفة (يجب أن تكون 6 أحرف على الأقل)');
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError('تسجيل الدخول بالبريد غير مفعل. يرجى تفعيله من لوحة تحكم Firebase.');
       } else {
-        setAuthError('حدث خطأ. تأكد من تفعيل تسجيل الدخول بالبريد في إعدادات Firebase.');
+        setAuthError('حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من البيانات المخزنة.');
       }
     }
   };
@@ -814,11 +801,15 @@ export default function App() {
             className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" 
           />
           <h1 className="text-2xl font-black text-stone-900 mb-1">جمعية تيفاوت للتنمية والتعاون</h1>
-          <p className="text-emerald-700 font-bold mb-1">دوار العامرية</p>
-          <p className="text-xs text-stone-500 mb-6">نظام تسيير مياه السقي</p>
+          <p className="text-emerald-700 font-bold mb-2">دوار العامرية</p>
+          
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold mb-6">
+            <Lock className="w-3.5 h-3.5" />
+            <span>تطبيق خاص وسري لتسيير مياه السقي</span>
+          </div>
           
           {authError && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100 font-medium">
               {authError}
             </div>
           )}
@@ -850,39 +841,17 @@ export default function App() {
             </div>
             <button 
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg shadow-emerald-200"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-200 cursor-pointer"
             >
-              {isSignUp ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
+              تسجيل الدخول
             </button>
           </form>
 
-          <div className="flex items-center justify-between text-sm mb-6">
-            <span className="text-stone-500">
-              {isSignUp ? 'لديك حساب بالفعل؟' : 'ليس لديك حساب؟'}
-            </span>
-            <button 
-              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
-              className="text-emerald-600 font-bold hover:underline"
-            >
-              {isSignUp ? 'تسجيل الدخول' : 'إنشاء حساب'}
-            </button>
-          </div>
+          <p className="text-xs text-stone-400 leading-relaxed bg-stone-50 p-3 rounded-xl border border-stone-200">
+            ملاحظة: التسجيل مقفل. يتم إضافة وتفعيل الحسابات حصراً عن طريق إدارة الجمعية من قسم الإعدادات.
+          </p>
 
-          <div className="relative flex items-center py-2 mb-6">
-            <div className="flex-grow border-t border-stone-200"></div>
-            <span className="flex-shrink-0 mx-4 text-stone-400 text-sm">أو</span>
-            <div className="flex-grow border-t border-stone-200"></div>
-          </div>
-          
-          <button 
-            onClick={handleLogin}
-            className="w-full bg-white border-2 border-stone-200 hover:bg-stone-50 text-stone-700 font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-3"
-          >
-            <UserCircle className="w-6 h-6 text-stone-500" />
-            المتابعة باستخدام جوجل
-          </button>
-          
-          <div className="mt-8 pt-6 border-t border-stone-100">
+          <div className="mt-6 pt-4 border-t border-stone-100">
             <p className="text-xs text-stone-400">جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}</p>
           </div>
         </motion.div>
@@ -1059,7 +1028,7 @@ export default function App() {
             {isTabAllowed('reports') && activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
             {isTabAllowed('transfers') && activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
             {isTabAllowed('activity') && activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
-            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} profile={profile} /></div>}
+            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} profile={profile} showConfirm={showConfirm} /></div>}
           </AnimatePresence>
 
           <ConfirmModal 
@@ -2198,7 +2167,7 @@ const ALL_APP_SECTIONS = [
   { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
 ];
 
-function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, key?: string }) {
+function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, showConfirm?: (title: string, message: string, onConfirm: () => void) => void, key?: string }) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
   const [signatureUrl, setSignatureUrl] = useState(user.signatureUrl || '');
@@ -2356,26 +2325,55 @@ function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, 
           title={`رسم توقيع ${displayName || user.email}`}
         />
 
-        {canEditProfile && (
-          <button 
-            onClick={handleUpdate}
-            disabled={saving}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
-              savedSuccess 
-                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer'
-            }`}
-          >
-            {saving ? 'جاري الحفظ...' : savedSuccess ? (
-              <>
-                <CheckCircle className="w-4 h-4" />
-                تم الحفظ
-              </>
-            ) : (
-              'حفظ التوقيع والبيانات'
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {canEditProfile && (
+            <button 
+              onClick={handleUpdate}
+              disabled={saving}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
+                savedSuccess 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer'
+              }`}
+            >
+              {saving ? 'جاري الحفظ...' : savedSuccess ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  تم الحفظ
+                </>
+              ) : (
+                'حفظ التوقيع والبيانات'
+              )}
+            </button>
+          )}
+
+          {isAmin && !isSelf && user.email?.toLowerCase() !== 'amriahassan@gmail.com' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (showConfirm) {
+                  showConfirm(
+                    'حذف الحساب',
+                    `هل أنت تأكد من حذف المستخدم "${displayName || user.email}" بشكل نهائي؟ لن يستطيع هذا المستخدم تسجيل الدخول للتطبيق بعد ذلك.`,
+                    async () => {
+                      try {
+                        await deleteDoc(doc(db, 'users', user.uid));
+                      } catch (err) {
+                        console.error('Failed to delete user:', err);
+                        alert('حدث خطأ أثناء حذف الحساب.');
+                      }
+                    }
+                  );
+                }
+              }}
+              className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold rounded-xl border border-red-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="حذف هذا المستخدم"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>حذف</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Section Permissions Selector */}
@@ -2442,38 +2440,311 @@ function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, 
   );
 }
 
-function UserManagementView({ users, profile }: { users: UserProfile[], profile?: UserProfile }) {
+function UserManagementView({ users, profile, showConfirm }: { users: UserProfile[], profile?: UserProfile, showConfirm?: (title: string, message: string, onConfirm: () => void) => void }) {
   const isAmin = profile?.role === 'amin';
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newRole, setNewRole] = useState<UserRole>('mukallaf');
+  const [newSignatureUrl, setNewSignatureUrl] = useState('');
+  const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
+  const [isAddSigPadOpen, setIsAddSigPadOpen] = useState(false);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError('');
+    setAddSuccess('');
+
+    if (!newEmail.trim() || !newPassword || !newDisplayName.trim()) {
+      setAddError('يرجى ملء جميع الحقول المطلوبة (الاسم الكامل، البريد الإلكتروني، وكلمة المرور)');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setAddError('كلمة المرور يجب أن تتكون من 6 أحرف على الأقل');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Create account in Firebase Auth using secondary app instance
+      const newUser = await createNewUserAccount(newEmail.trim(), newPassword);
+
+      // 2. Write profile to Firestore
+      const newProfile: UserProfile = {
+        uid: newUser.uid,
+        email: newEmail.trim().toLowerCase(),
+        displayName: newDisplayName.trim(),
+        role: newRole,
+        signatureUrl: newSignatureUrl.trim(),
+        allowedTabs: newRole === 'amin' 
+          ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] 
+          : newAllowedTabs,
+        balance: 0
+      };
+
+      await setDoc(doc(db, 'users', newUser.uid), newProfile);
+
+      setAddSuccess(`تمت إضافة المستخدم "${newDisplayName.trim()}" بنجاح!`);
+      setNewEmail('');
+      setNewPassword('');
+      setNewDisplayName('');
+      setNewRole('mukallaf');
+      setNewSignatureUrl('');
+      setNewAllowedTabs(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+      
+      setTimeout(() => {
+        setIsAddModalOpen(false);
+        setAddSuccess('');
+      }, 1500);
+    } catch (error: any) {
+      console.error('Error creating user account:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        setAddError('هذا البريد الإلكتروني مستخدم بالفعل لمستخدم آخر.');
+      } else if (error.code === 'auth/invalid-email') {
+        setAddError('البريد الإلكتروني غير صحيح.');
+      } else if (error.code === 'auth/weak-password') {
+        setAddError('كلمة المرور ضعيفة جداً (6 أحرف على الأقل).');
+      } else {
+        setAddError('حدث خطأ أثناء إنشاء الحساب. يرجى التأكد من البيانات.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
         <div>
           <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
             إدارة المستخدمين والأقسام والصلاحيات والتواقيع
-            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة المستخدمين</span>
+            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة الحسابات</span>
           </h3>
-          <p className="text-sm text-stone-500 mt-1">يمكنك رفع صورة توقيعك أو كتابة رابط التوقيع ليظهر تلقائياً في وصل الاستلام والمستندات الرسمية.</p>
+          <p className="text-sm text-stone-500 mt-1">يمكنك إضافة أعضاء ومكلفين جدد، إلغاء أوتحكم في الحسابات، وتحديد صلاحيات كل مستخدم بالدقة.</p>
         </div>
-        <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700">
-          إجمالي المستخدمين: {users.length}
+        <div className="flex items-center gap-3">
+          <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700 shrink-0">
+            إجمالي المستخدمين: {users.length}
+          </div>
+          {isAmin && (
+            <button
+              onClick={() => {
+                setAddError('');
+                setAddSuccess('');
+                setIsAddModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة مستخدم جديد</span>
+            </button>
+          )}
         </div>
       </div>
 
       <div className="space-y-4">
         {users.map(u => (
-          <UserRowItem key={u.uid} user={u} currentUser={profile} isAmin={isAmin} />
+          <UserRowItem key={u.uid} user={u} currentUser={profile} isAmin={isAmin} showConfirm={showConfirm} />
         ))}
         {users.length === 0 && (
           <p className="p-8 text-center text-stone-400 bg-stone-50 rounded-2xl border border-stone-200">لا يوجد مستخدمون مسجلون بعد</p>
         )}
       </div>
 
+      {/* Modal for adding new user */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto text-right" dir="rtl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                <UserCircle className="w-5 h-5 text-emerald-600" />
+                إضافة مستخدم جديد للحساب السرّي
+              </h3>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 hover:bg-stone-100 rounded-full text-stone-400 hover:text-stone-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {addError && (
+              <div className="p-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs font-bold mb-4">
+                {addError}
+              </div>
+            )}
+
+            {addSuccess && (
+              <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold mb-4 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{addSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">الاسم الكامل للمستخدم *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold"
+                  placeholder="مثال: محمد العباسي"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">البريد الإلكتروني *</label>
+                  <input 
+                    type="email" 
+                    required
+                    dir="ltr"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs font-mono"
+                    placeholder="user@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">كلمة المرور *</label>
+                  <input 
+                    type="password" 
+                    required
+                    dir="ltr"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs font-mono"
+                    placeholder="•••••••• (6 أحرف على الأقل)"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">الصفة / الدور في الجمعية</label>
+                <select 
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as UserRole)}
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-bold text-stone-800"
+                >
+                  <option value="mukallaf">مكلف بالتحصيل والسقي</option>
+                  <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
+                  <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">توقيع المستخدم (اختياري)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={newSignatureUrl}
+                    onChange={(e) => setNewSignatureUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-xs dir-ltr"
+                    placeholder="رابط التوقيع أو اختر صورة"
+                  />
+                  <label className="cursor-pointer px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>رفع</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) setNewSignatureUrl(ev.target.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddSigPadOpen(true)}
+                    className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-stone-700" />
+                    <span>رسم</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Signature Modal inside add form */}
+              <SignaturePadModal
+                isOpen={isAddSigPadOpen}
+                onClose={() => setIsAddSigPadOpen(false)}
+                onSave={(dataUrl) => setNewSignatureUrl(dataUrl)}
+                title={`رسم توقيع ${newDisplayName || 'المستخدم الجديد'}`}
+              />
+
+              {/* Section Permissions Selection */}
+              {newRole !== 'amin' && (
+                <div className="pt-2 border-t border-stone-100">
+                  <label className="block text-xs font-bold text-stone-700 mb-2">الأقسام المسموح له بفتحها:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_APP_SECTIONS.map(s => {
+                      const isChecked = newAllowedTabs.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setNewAllowedTabs(prev => 
+                              prev.includes(s.id) ? prev.filter(t => t !== s.id) : [...prev, s.id]
+                            );
+                          }}
+                          className={`p-2 rounded-xl border text-right text-xs transition-all flex items-center gap-2 ${
+                            isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-400'
+                          }`}
+                        >
+                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                            isChecked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300'
+                          }`}>
+                            {isChecked && <CheckCircle className="w-3 h-3" />}
+                          </div>
+                          <span className="truncate">{s.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'جاري الإنشاء...' : 'حفظ وإنشاء الحساب'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs text-stone-600">
         <p className="font-bold text-stone-800 text-sm mb-1">دليل الأدوار والصلاحيات والتوقيع:</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-emerald-800 block mb-1">أمين المال (المسؤول)</span>
-            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات ورابط توقيع الأعضاء.
+            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات ورابط توقيع الأعضاء وإضافة أو حذف الحسابات.
           </div>
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-blue-800 block mb-1">رئيس الجمعية</span>
@@ -2524,7 +2795,7 @@ function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: 
   );
 }
 
-function SettingsView({ users, profile }: { users: UserProfile[], profile?: UserProfile }) {
+function SettingsView({ users, profile, showConfirm }: { users: UserProfile[], profile?: UserProfile, showConfirm?: (title: string, message: string, onConfirm: () => void) => void }) {
   const [subFee, setSubFee] = useState(SUBSCRIPTION_FEE);
   const [irrRate, setIrrRate] = useState(IRRIGATION_RATE);
   const [workerWage, setWorkerWage] = useState(WORKER_WAGE_PER_HOUR);
@@ -2630,7 +2901,7 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
         onSave={(dataUrl) => setAssocSignature(dataUrl)}
         title="رسم خاتم / توقيع الجمعية"
       />
-      <UserManagementView users={users} profile={profile} />
+      <UserManagementView users={users} profile={profile} showConfirm={showConfirm} />
     </div>
   );
 }
