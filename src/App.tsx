@@ -48,7 +48,9 @@ import {
   History, 
   Settings, 
   AlertCircle,
-  CheckCircle 
+  CheckCircle,
+  Lock,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -128,10 +130,16 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 // --- Components ---
 
 const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscription' | 'irrigation' }>(({ data, type }, ref) => {
+  const receiptNo = data.receiptNumber || (type === 'subscription' ? `SUB-${(data.id || '000000').slice(-6).toUpperCase()}` : `IRR-${(data.id || '000000').slice(-6).toUpperCase()}`);
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-4 max-w-md mx-auto" dir="rtl">
       <div className="text-center border-b-2 border-emerald-600 pb-4 mb-4 flex flex-col items-center">
-        <img src="/logo.jpg" alt="لوجو الجمعية" className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" />
+        <img 
+          src="/logo.jpg" 
+          onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+          alt="لوجو الجمعية" 
+          className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" 
+        />
         <h1 className="text-xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
         <p className="text-sm font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
         <span className="inline-block mt-2 px-4 py-1 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-sm rounded-full">
@@ -142,7 +150,7 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
       <div className="space-y-3 text-sm">
         <div className="flex justify-between border-b border-stone-100 pb-1">
           <span className="font-bold text-stone-600">رقم الوصل:</span>
-          <span className="font-mono font-bold text-stone-900">{data.receiptNumber || data.id?.slice(-6).toUpperCase()}</span>
+          <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{receiptNo}</span>
         </div>
         <div className="flex justify-between border-b border-stone-100 pb-1">
           <span className="font-bold text-stone-600">تاريخ الوصل:</span>
@@ -152,6 +160,13 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
           <span className="font-bold text-stone-600">اسم المشترك:</span>
           <span className="font-bold text-stone-900">{data.name || data.subscriberName}</span>
         </div>
+        
+        {data.collectorName && (
+          <div className="flex justify-between border-b border-stone-100 pb-1">
+            <span className="font-bold text-stone-600">المكلف بالمستحقات:</span>
+            <span className="font-bold text-stone-900">{data.collectorName}</span>
+          </div>
+        )}
         
         {type === 'irrigation' && (
           <>
@@ -210,7 +225,12 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
       {/* Report Header */}
       <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-6 mb-6">
         <div className="flex items-center gap-4">
-          <img src="/logo.jpg" alt="لوجو الجمعية" className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" />
+          <img 
+            src="/logo.jpg" 
+            onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+            alt="لوجو الجمعية" 
+            className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" 
+          />
           <div>
             <h1 className="text-2xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
             <p className="text-base font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
@@ -444,7 +464,7 @@ export default function App() {
 
   // Real-time Data Listeners
   useEffect(() => {
-    if (!profile) return;
+    if (!user) return;
 
     const unsubSubscribers = onSnapshot(collection(db, 'subscribers'), (snapshot) => {
       setSubscribers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Subscriber)));
@@ -463,7 +483,24 @@ export default function App() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'transfers'));
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile)));
+      const updatedUsers = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
+      setUsers(updatedUsers);
+      const myProfile = updatedUsers.find(u => u.uid === user.uid);
+      if (myProfile) {
+        setProfile(prev => {
+          if (!prev) return myProfile;
+          if (
+            prev.uid === myProfile.uid &&
+            prev.displayName === myProfile.displayName &&
+            prev.role === myProfile.role &&
+            prev.balance === myProfile.balance &&
+            JSON.stringify(prev.allowedTabs) === JSON.stringify(myProfile.allowedTabs)
+          ) {
+            return prev;
+          }
+          return myProfile;
+        });
+      }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     return () => {
@@ -473,7 +510,25 @@ export default function App() {
       unsubTransfers();
       unsubUsers();
     };
-  }, [profile]);
+  }, [user?.uid]);
+
+  const isTabAllowed = (tabId: string) => {
+    if (!profile) return false;
+    if (profile.role === 'amin') return true;
+    if (tabId === 'settings') return false;
+    if (!profile.allowedTabs || profile.allowedTabs.length === 0) return true;
+    return profile.allowedTabs.includes(tabId);
+  };
+
+  useEffect(() => {
+    if (profile && !isTabAllowed(activeTab)) {
+      const allTabs = ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'];
+      const firstAllowed = allTabs.find(t => isTabAllowed(t)) || 'dashboard';
+      if (firstAllowed !== activeTab) {
+        setActiveTab(firstAllowed);
+      }
+    }
+  }, [profile?.role, JSON.stringify(profile?.allowedTabs), activeTab]);
 
   const handleLogin = async () => {
     try {
@@ -533,7 +588,12 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-stone-100"
         >
-          <img src="/logo.jpg" alt="لوجو الجمعية" className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" />
+          <img 
+            src="/logo.jpg" 
+            onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+            alt="لوجو الجمعية" 
+            className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" 
+          />
           <h1 className="text-2xl font-black text-stone-900 mb-1">جمعية تيفاوت للتنمية والتعاون</h1>
           <p className="text-emerald-700 font-bold mb-1">دوار العامرية</p>
           <p className="text-xs text-stone-500 mb-6">نظام تسيير مياه السقي</p>
@@ -621,7 +681,12 @@ export default function App() {
         <div className="h-full flex flex-col">
           <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src="/logo.jpg" alt="لوجو الجمعية" className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" />
+              <img 
+                src="/logo.jpg" 
+                onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+                alt="لوجو الجمعية" 
+                className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
+              />
               <div className="flex flex-col min-w-0">
                 <span className="font-bold text-sm text-stone-900 leading-tight truncate">جمعية تيفاوت</span>
                 <span className="text-xs font-semibold text-emerald-700 leading-tight">للتنمية والتعاون</span>
@@ -634,48 +699,62 @@ export default function App() {
           </div>
 
           <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
-            <SidebarItem 
-              active={activeTab === 'dashboard'} 
-              onClick={() => {setActiveTab('dashboard'); setIsSidebarOpen(false);}}
-              icon={<LayoutDashboard className="w-5 h-5" />}
-              label="لوحة التحكم"
-            />
-            <SidebarItem 
-              active={activeTab === 'subscribers'} 
-              onClick={() => {setActiveTab('subscribers'); setIsSidebarOpen(false);}}
-              icon={<Users className="w-5 h-5" />}
-              label="المشتركين"
-            />
-            <SidebarItem 
-              active={activeTab === 'irrigation'} 
-              onClick={() => {setActiveTab('irrigation'); setIsSidebarOpen(false);}}
-              icon={<Droplets className="w-5 h-5" />}
-              label="حصص السقي"
-            />
-            <SidebarItem 
-              active={activeTab === 'expenses'} 
-              onClick={() => {setActiveTab('expenses'); setIsSidebarOpen(false);}}
-              icon={<CreditCard className="w-5 h-5" />}
-              label="المصاريف"
-            />
-            <SidebarItem 
-              active={activeTab === 'reports'} 
-              onClick={() => {setActiveTab('reports'); setIsSidebarOpen(false);}}
-              icon={<BarChart3 className="w-5 h-5" />}
-              label="التقارير"
-            />
-            <SidebarItem 
-              active={activeTab === 'transfers'} 
-              onClick={() => {setActiveTab('transfers'); setIsSidebarOpen(false);}}
-              icon={<ArrowRightLeft className="w-5 h-5" />}
-              label="تحويل الرصيد"
-            />
-            <SidebarItem 
-              active={activeTab === 'activity'} 
-              onClick={() => {setActiveTab('activity'); setIsSidebarOpen(false);}}
-              icon={<History className="w-5 h-5" />}
-              label="سجل العمليات"
-            />
+            {isTabAllowed('dashboard') && (
+              <SidebarItem 
+                active={activeTab === 'dashboard'} 
+                onClick={() => {setActiveTab('dashboard'); setIsSidebarOpen(false);}}
+                icon={<LayoutDashboard className="w-5 h-5" />}
+                label="لوحة التحكم"
+              />
+            )}
+            {isTabAllowed('subscribers') && (
+              <SidebarItem 
+                active={activeTab === 'subscribers'} 
+                onClick={() => {setActiveTab('subscribers'); setIsSidebarOpen(false);}}
+                icon={<Users className="w-5 h-5" />}
+                label="المشتركين"
+              />
+            )}
+            {isTabAllowed('irrigation') && (
+              <SidebarItem 
+                active={activeTab === 'irrigation'} 
+                onClick={() => {setActiveTab('irrigation'); setIsSidebarOpen(false);}}
+                icon={<Droplets className="w-5 h-5" />}
+                label="حصص السقي"
+              />
+            )}
+            {isTabAllowed('expenses') && (
+              <SidebarItem 
+                active={activeTab === 'expenses'} 
+                onClick={() => {setActiveTab('expenses'); setIsSidebarOpen(false);}}
+                icon={<CreditCard className="w-5 h-5" />}
+                label="المصاريف"
+              />
+            )}
+            {isTabAllowed('reports') && (
+              <SidebarItem 
+                active={activeTab === 'reports'} 
+                onClick={() => {setActiveTab('reports'); setIsSidebarOpen(false);}}
+                icon={<BarChart3 className="w-5 h-5" />}
+                label="التقارير"
+              />
+            )}
+            {isTabAllowed('transfers') && (
+              <SidebarItem 
+                active={activeTab === 'transfers'} 
+                onClick={() => {setActiveTab('transfers'); setIsSidebarOpen(false);}}
+                icon={<ArrowRightLeft className="w-5 h-5" />}
+                label="تحويل الرصيد"
+              />
+            )}
+            {isTabAllowed('activity') && (
+              <SidebarItem 
+                active={activeTab === 'activity'} 
+                onClick={() => {setActiveTab('activity'); setIsSidebarOpen(false);}}
+                icon={<History className="w-5 h-5" />}
+                label="سجل العمليات"
+              />
+            )}
             {profile.role === 'amin' && (
               <SidebarItem 
                 active={activeTab === 'settings'} 
@@ -724,7 +803,12 @@ export default function App() {
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-stone-600">
               <Menu className="w-6 h-6" />
             </button>
-            <img src="/logo.jpg" alt="لوجو الجمعية" className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" />
+            <img 
+              src="/logo.jpg" 
+              onError={(e) => { e.currentTarget.src = 'https://lh3.googleusercontent.com/d/1W0IIF7dfqYBcm7pE88HFutyO1ZZgXJfr'; }} 
+              alt="لوجو الجمعية" 
+              className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
+            />
             <div className="flex flex-col">
               <h2 className="text-base sm:text-lg font-bold text-stone-900 leading-tight flex items-center gap-2">
                 جمعية تيفاوت للتنمية والتعاون
@@ -751,14 +835,14 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
-            {activeTab === 'dashboard' && <div key="dashboard"><DashboardView subscribers={subscribers} sessions={sessions} expenses={expenses} profile={profile} /></div>}
-            {activeTab === 'subscribers' && <div key="subscribers"><SubscribersView subscribers={subscribers} profile={profile} /></div>}
-            {activeTab === 'irrigation' && <div key="irrigation"><IrrigationView subscribers={subscribers} sessions={sessions} profile={profile} showConfirm={showConfirm} /></div>}
-            {activeTab === 'expenses' && <div key="expenses"><ExpensesView expenses={expenses} profile={profile} /></div>}
-            {activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
-            {activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
-            {activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
-            {activeTab === 'settings' && <div key="settings"><SettingsView users={users} /></div>}
+            {isTabAllowed('dashboard') && activeTab === 'dashboard' && <div key="dashboard"><DashboardView subscribers={subscribers} sessions={sessions} expenses={expenses} profile={profile} /></div>}
+            {isTabAllowed('subscribers') && activeTab === 'subscribers' && <div key="subscribers"><SubscribersView subscribers={subscribers} profile={profile} /></div>}
+            {isTabAllowed('irrigation') && activeTab === 'irrigation' && <div key="irrigation"><IrrigationView subscribers={subscribers} sessions={sessions} profile={profile} showConfirm={showConfirm} users={users} /></div>}
+            {isTabAllowed('expenses') && activeTab === 'expenses' && <div key="expenses"><ExpensesView expenses={expenses} profile={profile} users={users} /></div>}
+            {isTabAllowed('reports') && activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
+            {isTabAllowed('transfers') && activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
+            {isTabAllowed('activity') && activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
+            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} /></div>}
           </AnimatePresence>
 
           <ConfirmModal 
@@ -905,6 +989,7 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
   const [phone, setPhone] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [search, setSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -914,15 +999,18 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return;
+    if (!name.trim()) return;
+    setIsSubmitting(true);
     try {
+      const receiptNum = `SUB-${Date.now().toString().slice(-6)}`;
       const newSub = {
-        name,
-        phone,
-        nationalId,
+        name: name.trim(),
+        phone: phone.trim(),
+        nationalId: nationalId.trim(),
         subscriptionDate: new Date().toISOString(),
         subscriptionFeePaid: SUBSCRIPTION_FEE,
-        balance: 0
+        balance: 0,
+        receiptNumber: receiptNum
       };
       const docRef = await addDoc(collection(db, 'subscribers'), { ...newSub, createdBy: profile.uid });
       
@@ -936,21 +1024,23 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
       setNationalId('');
       setIsAdding(false);
       
-      setSelectedSubscriber({ id: docRef.id, ...newSub } as Subscriber);
-      setTimeout(() => handlePrint(), 500);
+      setSelectedSubscriber({ id: docRef.id, ...newSub, collectorName: profile.displayName } as Subscriber & { collectorName?: string });
+      setTimeout(() => handlePrint(), 400);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'subscribers');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSubscriber || !name) return;
+    if (!selectedSubscriber || !name.trim()) return;
     try {
       await updateDoc(doc(db, 'subscribers', selectedSubscriber.id), {
-        name,
-        phone,
-        nationalId
+        name: name.trim(),
+        phone: phone.trim(),
+        nationalId: nationalId.trim()
       });
       setIsEditing(false);
       setSelectedSubscriber(null);
@@ -970,7 +1060,12 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
     setIsEditing(true);
   };
 
-  const filtered = subscribers.filter(s => s.name.includes(search) || s.phone?.includes(search));
+  const filtered = subscribers.filter(s => 
+    s.name.includes(search) || 
+    s.phone?.includes(search) || 
+    s.nationalId?.includes(search) || 
+    s.receiptNumber?.includes(search)
+  );
   
   const debtors = subscribers.filter(s => (s.subscriptionFeePaid < SUBSCRIPTION_FEE) || (s.balance && s.balance < 0));
 
@@ -1011,31 +1106,40 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
           <input 
             type="text" 
-            placeholder="بحث عن مشترك..." 
+            placeholder="بحث بالاسم، الهاتف، أو رقم الوصل..." 
             className="w-full pr-12 pl-4 py-3 bg-white border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <button 
-          onClick={() => setIsAdding(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-100"
-        >
-          <Plus className="w-5 h-5" />
-          إضافة مشترك جديد
-        </button>
-        <button 
-          onClick={() => downloadCSV(subscribers, [
-            { header: 'الاسم', accessor: (s) => s.name },
-            { header: 'الهاتف', accessor: (s) => s.phone },
-            { header: 'تاريخ الاشتراك', accessor: (s) => formatDate(s.subscriptionDate) },
-            { header: 'واجب الاشتراك', accessor: (s) => s.subscriptionFeePaid }
-          ], 'المشتركون')}
-          className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2"
-        >
-          <Download className="w-5 h-5" />
-          تصدير CSV
-        </button>
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button 
+            onClick={() => {
+              setName('');
+              setPhone('');
+              setNationalId('');
+              setIsAdding(true);
+            }}
+            className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
+          >
+            <Plus className="w-5 h-5" />
+            إضافة مشترك جديد
+          </button>
+          <button 
+            onClick={() => downloadCSV(subscribers, [
+              { header: 'رقم الوصل', accessor: (s) => s.receiptNumber || `SUB-${s.id.slice(-6).toUpperCase()}` },
+              { header: 'الاسم', accessor: (s) => s.name },
+              { header: 'رقم البطاقة الوطنية', accessor: (s) => s.nationalId || '-' },
+              { header: 'الهاتف', accessor: (s) => s.phone || '-' },
+              { header: 'تاريخ الاشتراك', accessor: (s) => formatDate(s.subscriptionDate) },
+              { header: 'واجب الاشتراك', accessor: (s) => s.subscriptionFeePaid }
+            ], 'المشتركون')}
+            className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            تصدير CSV
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
@@ -1043,6 +1147,7 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
           <table className="w-full text-right">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-600">رقم الوصل</th>
                 <th className="px-6 py-4 font-bold text-stone-600">الاسم</th>
                 <th className="px-6 py-4 font-bold text-stone-600">رقم البطاقة الوطنية</th>
                 <th className="px-6 py-4 font-bold text-stone-600">الهاتف</th>
@@ -1052,51 +1157,141 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {filtered.map(sub => (
-                <tr key={sub.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-stone-900">{sub.name}</td>
-                  <td className="px-6 py-4 text-stone-600">{sub.nationalId || '-'}</td>
-                  <td className="px-6 py-4 text-stone-600">{sub.phone || '-'}</td>
-                  <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(sub.subscriptionDate)}</td>
-                  <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(sub.subscriptionFeePaid)}</td>
-                  <td className="px-6 py-4 flex items-center gap-2">
-                    <button 
-                      onClick={() => startEdit(sub)}
-                      className="p-2 text-stone-400 hover:text-blue-600 transition-colors"
-                      title="تعديل"
-                    >
-                      <Settings className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => {setSelectedSubscriber(sub); setTimeout(() => handlePrint(), 100);}}
-                      className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
-                      title="طباعة الوصل"
-                    >
-                      <Printer className="w-5 h-5" />
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (confirm('هل أنت متأكد من حذف هذا المشترك؟')) {
-                          deleteDoc(doc(db, 'subscribers', sub.id));
-                        }
-                      }}
-                      className="p-2 text-stone-400 hover:text-red-600 transition-colors"
-                      title="حذف"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map(sub => {
+                const subReceiptNo = sub.receiptNumber || `SUB-${sub.id.slice(-6).toUpperCase()}`;
+                return (
+                  <tr key={sub.id} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4 font-mono font-bold text-xs text-emerald-900">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100 inline-block">
+                        {subReceiptNo}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-stone-900">{sub.name}</td>
+                    <td className="px-6 py-4 text-stone-600">{sub.nationalId || '-'}</td>
+                    <td className="px-6 py-4 text-stone-600">{sub.phone || '-'}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(sub.subscriptionDate)}</td>
+                    <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(sub.subscriptionFeePaid)}</td>
+                    <td className="px-6 py-4 flex items-center gap-2">
+                      <button 
+                        onClick={() => startEdit(sub)}
+                        className="p-2 text-stone-400 hover:text-blue-600 transition-colors"
+                        title="تعديل"
+                      >
+                        <Settings className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => {setSelectedSubscriber({ ...sub, receiptNumber: subReceiptNo, collectorName: profile.displayName }); setTimeout(() => handlePrint(), 100);}}
+                        className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                        title="طباعة الوصل"
+                      >
+                        <Printer className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من حذف هذا المشترك؟')) {
+                            deleteDoc(doc(db, 'subscribers', sub.id));
+                          }
+                        }}
+                        className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-stone-400">لا يوجد مشتركين بهذا الاسم</td>
+                  <td colSpan={7} className="px-6 py-12 text-center text-stone-400">لا يوجد مشتركين بهذا البحث</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Add Modal */}
+      {isAdding && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-stone-900">إضافة مشترك جديد</h3>
+              <button 
+                onClick={() => setIsAdding(false)} 
+                className="text-stone-400 hover:text-stone-600 p-1"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">اسم المشترك الكامل *</label>
+                <input 
+                  autoFocus
+                  required
+                  type="text" 
+                  placeholder="مثال: محمد بن علي"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم البطاقة الوطنية (CIN)</label>
+                <input 
+                  type="text" 
+                  placeholder="مثال: AB123456"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={nationalId}
+                  onChange={(e) => setNationalId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم الهاتف</label>
+                <input 
+                  type="tel" 
+                  placeholder="مثال: 0661234567"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1">
+                <div className="flex justify-between text-sm font-bold text-emerald-900">
+                  <span>واجب الاشتراك المستحق:</span>
+                  <span>{formatCurrency(SUBSCRIPTION_FEE)}</span>
+                </div>
+                <p className="text-xs text-emerald-700">سيتم إصدار وصل رقمي آلي إضافة إلى تحويل المبلغ لصندوق الجمعية.</p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="submit"
+                  disabled={isSubmitting || !name.trim()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-300 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  {isSubmitting ? 'جاري الإضافة...' : 'إضافة وطباعة الوصل'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {isEditing && (
@@ -1165,7 +1360,7 @@ function SubscribersView({ subscribers, profile }: { subscribers: Subscriber[], 
   );
 }
 
-function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subscribers: Subscriber[], sessions: IrrigationSession[], profile: UserProfile, showConfirm: (title: string, message: string, onConfirm: () => void) => void }) {
+function IrrigationView({ subscribers, sessions, profile, showConfirm, users }: { subscribers: Subscriber[], sessions: IrrigationSession[], profile: UserProfile, showConfirm: (title: string, message: string, onConfirm: () => void) => void, users?: UserProfile[] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [selectedSubId, setSelectedSubId] = useState('');
   const [hours, setHours] = useState(1);
@@ -1259,7 +1454,9 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subsc
           <table className="w-full text-right">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-600">رقم الوصل</th>
                 <th className="px-6 py-4 font-bold text-stone-600">المشترك</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المكلف بالمستحقات</th>
                 <th className="px-6 py-4 font-bold text-stone-600">التاريخ</th>
                 <th className="px-6 py-4 font-bold text-stone-600">الساعات</th>
                 <th className="px-6 py-4 font-bold text-stone-600">المبلغ</th>
@@ -1268,25 +1465,34 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subsc
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {sessions.map(session => (
-                <tr key={session.id} className={`hover:bg-stone-50 transition-colors ${session.status === 'cancelled' ? 'opacity-50 grayscale' : ''}`}>
-                  <td className="px-6 py-4 font-bold text-stone-900">{session.subscriberName}</td>
-                  <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(session.date)}</td>
-                  <td className="px-6 py-4 text-stone-600">{session.hours} ساعة</td>
-                  <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(session.totalAmount)}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${session.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                      {session.status === 'paid' ? 'مؤدى' : 'ملغى'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 flex items-center gap-2">
-                    <button 
-                      onClick={() => {setSelectedSession(session); setTimeout(() => handlePrint(), 100);}}
-                      className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
-                      title="طباعة"
-                    >
-                      <Printer className="w-5 h-5" />
-                    </button>
+              {sessions.map(session => {
+                const collectorName = users?.find(u => u.uid === session.collectedBy)?.displayName || profile.displayName;
+                const irrReceiptNo = session.receiptNumber || `IRR-${session.id.slice(-6).toUpperCase()}`;
+                return (
+                  <tr key={session.id} className={`hover:bg-stone-50 transition-colors ${session.status === 'cancelled' ? 'opacity-50 grayscale' : ''}`}>
+                    <td className="px-6 py-4 font-mono font-bold text-xs text-emerald-900">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100 inline-block">
+                        {irrReceiptNo}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-stone-900">{session.subscriberName}</td>
+                    <td className="px-6 py-4 text-xs font-semibold text-emerald-800">{collectorName}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(session.date)}</td>
+                    <td className="px-6 py-4 text-stone-600">{session.hours} ساعة</td>
+                    <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(session.totalAmount)}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${session.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                        {session.status === 'paid' ? 'مؤدى' : 'ملغى'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 flex items-center gap-2">
+                      <button 
+                        onClick={() => {setSelectedSession({ ...session, collectorName } as any); setTimeout(() => handlePrint(), 100);}}
+                        className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                        title="طباعة"
+                      >
+                        <Printer className="w-5 h-5" />
+                      </button>
                     {session.status === 'paid' && (
                       <button 
                         onClick={() => handleCancel(session)}
@@ -1318,7 +1524,8 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subsc
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
               {sessions.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-stone-400">لا توجد عمليات سقي مسجلة</td>
@@ -1407,7 +1614,7 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subsc
   );
 }
 
-function ExpensesView({ expenses, profile }: { expenses: Expense[], profile: UserProfile }) {
+function ExpensesView({ expenses, profile, users }: { expenses: Expense[], profile: UserProfile, users?: UserProfile[] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(0);
@@ -1423,10 +1630,6 @@ function ExpensesView({ expenses, profile }: { expenses: Expense[], profile: Use
         addedBy: profile.uid,
         createdBy: profile.uid
       });
-      
-      // Expenses are usually paid from the association's central fund (Amin)
-      // But if a Mukallaf pays, we might need to track that. 
-      // For now, we just record the expense.
       
       setDescription('');
       setAmount(0);
@@ -1458,35 +1661,40 @@ function ExpensesView({ expenses, profile }: { expenses: Expense[], profile: Use
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200">
                 <th className="px-6 py-4 font-bold text-stone-600">الوصف</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المضيف</th>
                 <th className="px-6 py-4 font-bold text-stone-600">التاريخ</th>
                 <th className="px-6 py-4 font-bold text-stone-600">المبلغ</th>
                 <th className="px-6 py-4 font-bold text-stone-600">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {expenses.map(expense => (
-                <tr key={expense.id} className="hover:bg-stone-50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-stone-900">{expense.description}</td>
-                  <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(expense.date)}</td>
-                  <td className="px-6 py-4 font-bold text-red-600">{formatCurrency(expense.amount)}</td>
-                  <td className="px-6 py-4">
-                    <button 
-                      onClick={() => {
-                        if (confirm('هل أنت متأكد من حذف هذه المصاريف؟')) {
-                          deleteDoc(doc(db, 'expenses', expense.id));
-                        }
-                      }}
-                      className="p-2 text-stone-400 hover:text-red-600 transition-colors"
-                      title="حذف"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {expenses.map(expense => {
+                const adderName = users?.find(u => u.uid === expense.addedBy || u.uid === expense.createdBy)?.displayName || profile.displayName;
+                return (
+                  <tr key={expense.id} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-stone-900">{expense.description}</td>
+                    <td className="px-6 py-4 text-xs font-semibold text-stone-700">{adderName}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(expense.date)}</td>
+                    <td className="px-6 py-4 font-bold text-red-600">{formatCurrency(expense.amount)}</td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من حذف هذه المصاريف؟')) {
+                            deleteDoc(doc(db, 'expenses', expense.id));
+                          }
+                        }}
+                        className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {expenses.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-stone-400">لا توجد مصاريف مسجلة</td>
+                  <td colSpan={5} className="px-6 py-12 text-center text-stone-400">لا توجد مصاريف مسجلة</td>
                 </tr>
               )}
             </tbody>
@@ -1735,16 +1943,42 @@ function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions:
 }
 
 
-function UserRowItem({ user }: { user: UserProfile }) {
+const ALL_APP_SECTIONS = [
+  { id: 'dashboard', name: 'لوحة التحكم', description: 'الإحصائيات العامة والرصيد' },
+  { id: 'subscribers', name: 'إدارة المشتركين', description: 'إضافة وتعديل بيانات المشتركين' },
+  { id: 'irrigation', name: 'حصص السقي', description: 'استيفاء حصص السقي وطباعة الوصل' },
+  { id: 'expenses', name: 'المصاريف', description: 'تسجيل مصاريف وتكاليف الجمعية' },
+  { id: 'reports', name: 'التقارير المالية', description: 'متابعة المداخيل والحسابات' },
+  { id: 'transfers', name: 'تحويل الرصيد', description: 'إرسال وتحويل المبالغ بين الأعضاء' },
+  { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
+];
+
+function UserRowItem({ user }: { user: UserProfile, key?: string }) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
+  const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     setDisplayName(user.displayName || '');
     setRole(user.role || 'mukallaf');
-  }, [user]);
+    setAllowedTabs(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  }, [user.uid, user.displayName, user.role, JSON.stringify(user.allowedTabs)]);
+
+  const toggleTab = (tabId: string) => {
+    setAllowedTabs(prev => 
+      prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]
+    );
+  };
+
+  const selectAll = () => {
+    setAllowedTabs(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  };
+
+  const deselectAll = () => {
+    setAllowedTabs([]);
+  };
 
   const handleUpdate = async () => {
     if (!displayName.trim()) return;
@@ -1752,7 +1986,8 @@ function UserRowItem({ user }: { user: UserProfile }) {
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: displayName.trim(),
-        role: role
+        role: role,
+        allowedTabs: role === 'amin' ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] : allowedTabs
       });
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
@@ -1765,33 +2000,46 @@ function UserRowItem({ user }: { user: UserProfile }) {
   };
 
   return (
-    <tr className="hover:bg-stone-50/50 transition-colors">
-      <td className="px-6 py-4">
-        <input 
-          type="text" 
-          value={displayName} 
-          onChange={(e) => setDisplayName(e.target.value)}
-          className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full max-w-xs"
-          placeholder="اسم المستخدم"
-        />
-      </td>
-      <td className="px-6 py-4 text-right text-stone-600 font-mono text-sm">{user.email}</td>
-      <td className="px-6 py-4">
-        <select 
-          value={role}
-          onChange={(e) => setRole(e.target.value as UserRole)}
-          className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-800"
-        >
-          <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
-          <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
-          <option value="mukallaf">مكلف بالتحصيل والسقي</option>
-        </select>
-      </td>
-      <td className="px-6 py-4 text-center">
+    <div className="bg-stone-50/90 p-6 rounded-2xl border border-stone-200 space-y-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">الاسم الكامل في التطبيق</label>
+            <input 
+              type="text" 
+              value={displayName} 
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full"
+              placeholder="اسم المستخدم"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">البريد الإلكتروني</label>
+            <input 
+              disabled
+              type="text" 
+              value={user.email} 
+              className="px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl font-mono text-xs text-stone-500 w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">الصفة / الدور</label>
+            <select 
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-bold text-stone-800 w-full"
+            >
+              <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
+              <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
+              <option value="mukallaf">مكلف بالتحصيل والسقي</option>
+            </select>
+          </div>
+        </div>
+
         <button 
           onClick={handleUpdate}
           disabled={saving}
-          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 mx-auto ${
+          className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
             savedSuccess 
               ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
               : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
@@ -1803,11 +2051,71 @@ function UserRowItem({ user }: { user: UserProfile }) {
               تم الحفظ
             </>
           ) : (
-            'حفظ البيانات'
+            'حفظ التغييرات والصلاحيات'
           )}
         </button>
-      </td>
-    </tr>
+      </div>
+
+      {/* Section Permissions Selector */}
+      <div className="pt-3 border-t border-stone-200">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-stone-500" />
+            الأقسام المسموح بظهورها لهذا المستخدم في القائمة:
+          </span>
+          {role !== 'amin' && (
+            <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={selectAll} 
+                className="text-[11px] font-bold text-emerald-700 hover:underline"
+              >
+                تحديد الكل
+              </button>
+              <span className="text-stone-300">|</span>
+              <button 
+                type="button" 
+                onClick={deselectAll} 
+                className="text-[11px] font-bold text-stone-500 hover:underline"
+              >
+                إلغاء الكل
+              </button>
+            </div>
+          )}
+        </div>
+
+        {role === 'amin' ? (
+          <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800">
+            أمين المال يمتلك صلاحيات شاملة لكافة أقسام التطبيق والإعدادات.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {ALL_APP_SECTIONS.map(section => {
+              const isChecked = allowedTabs.includes(section.id);
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => toggleTab(section.id)}
+                  className={`p-2.5 rounded-xl border text-right transition-all flex items-center gap-2 ${
+                    isChecked
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
+                      : 'bg-white border-stone-200 text-stone-400 font-medium hover:border-stone-300'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                    isChecked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300 bg-stone-50'
+                  }`}>
+                    {isChecked && <CheckCircle className="w-3.5 h-3.5" />}
+                  </div>
+                  <span className="text-xs truncate">{section.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1817,37 +2125,23 @@ function UserManagementView({ users }: { users: UserProfile[] }) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
         <div>
           <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            إدارة المستخدمين والصلاحيات
+            إدارة المستخدمين والأقسام والصلاحيات
             <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة أمين المال</span>
           </h3>
-          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين وتحديد صفاتهم وصلاحياتهم في التطبيق.</p>
+          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين وإعطاء صلاحية التحكم في الأقسام الظاهرة لكل مستخدم.</p>
         </div>
         <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700">
           إجمالي المستخدمين: {users.length}
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-right">
-          <thead>
-            <tr className="bg-stone-50 border-b border-stone-200 text-stone-600">
-              <th className="px-6 py-4 font-bold">الاسم الكامل في التطبيق</th>
-              <th className="px-6 py-4 font-bold">البريد الإلكتروني</th>
-              <th className="px-6 py-4 font-bold">الدور والصلاحية</th>
-              <th className="px-6 py-4 font-bold text-center">التحديث</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {users.map(u => (
-              <UserRowItem key={u.uid} user={u} />
-            ))}
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-stone-400">لا يوجد مستخدمون مسجلون بعد</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="space-y-4">
+        {users.map(u => (
+          <UserRowItem key={u.uid} user={u} />
+        ))}
+        {users.length === 0 && (
+          <p className="p-8 text-center text-stone-400 bg-stone-50 rounded-2xl border border-stone-200">لا يوجد مستخدمون مسجلون بعد</p>
+        )}
       </div>
 
       <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs text-stone-600">
@@ -1855,15 +2149,15 @@ function UserManagementView({ users }: { users: UserProfile[] }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-emerald-800 block mb-1">أمين المال (المسؤول)</span>
-            المسؤول المالي عن الجمعية، له الصلاحية الكاملة لإدارة الإعدادات والأسماء والأدوار وتأكيد أجور العمال والتحويلات.
+            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات بقية الأعضاء.
           </div>
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-blue-800 block mb-1">رئيس الجمعية</span>
-            له صلاحية الاطلاع والمراقبة وتتبع العمليات واستخراج التقارير دون تعديل الإعدادات.
+            يطلع على العمليات والتقارير في الأقسام المحددة له من طرف أمين المال.
           </div>
           <div className="p-3 bg-white rounded-xl border border-stone-200">
             <span className="font-bold text-stone-800 block mb-1">مكلف بالتحصيل والسقي</span>
-            مكلف بتسجيل المشتركين واستيفاء أجور حصص السقي وإدارة العمليات الميدانية.
+            يستوفي أجور السقي والاشتراكات وينفذ العمليات في الأقسام المتاحة له فقط.
           </div>
         </div>
       </div>
@@ -1873,10 +2167,10 @@ function UserManagementView({ users }: { users: UserProfile[] }) {
 
 function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: { users: UserProfile[], subscribers: Subscriber[], sessions: IrrigationSession[], expenses: Expense[], transfers: Transfer[] }) {
   const activities = [
-    ...subscribers.map(s => ({ ...s, type: 'مشترك جديد', date: s.subscriptionDate })),
-    ...sessions.map(s => ({ ...s, type: 'عملية سقي', date: s.date })),
-    ...expenses.map(e => ({ ...e, type: 'مصاريف', date: e.date })),
-    ...transfers.map(t => ({ ...t, type: 'تحويل', date: t.date })),
+    ...subscribers.map(s => ({ ...s, type: 'مشترك جديد', details: `${s.name} (${s.receiptNumber || `SUB-${s.id.slice(-6).toUpperCase()}`})`, date: s.subscriptionDate })),
+    ...sessions.map(s => ({ ...s, type: 'عملية سقي', details: `${s.subscriberName} - ${s.hours} ساعة (${s.receiptNumber || `IRR-${s.id.slice(-6).toUpperCase()}`})`, date: s.date })),
+    ...expenses.map(e => ({ ...e, type: 'مصاريف', details: `${e.description} (${formatCurrency(e.amount)})`, date: e.date })),
+    ...transfers.map(t => ({ ...t, type: 'تحويل رصيد', details: `مبلغ ${formatCurrency(t.amount)}`, date: t.date })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
 
   return (
@@ -1886,12 +2180,17 @@ function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: 
         {activities.map((a: any, i) => {
           const user = users.find(u => u.uid === a.createdBy);
           return (
-            <div key={i} className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-100">
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-100 gap-2">
               <div>
-                <p className="font-bold text-stone-900">{a.type}</p>
-                <p className="text-xs text-stone-500">{formatDate(a.date)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-stone-900">{a.type}</p>
+                  <span className="text-xs font-semibold text-stone-600 bg-stone-200/60 px-2.5 py-0.5 rounded-lg">{a.details}</span>
+                </div>
+                <p className="text-xs text-stone-400 mt-1">{formatDate(a.date)}</p>
               </div>
-              <p className="text-sm font-medium text-stone-600">بواسطة: {user?.displayName || 'مستخدم غير معروف'}</p>
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 self-start sm:self-auto">
+                بواسطة: {user?.displayName || 'مستخدم غير معروف'}
+              </span>
             </div>
           );
         })}

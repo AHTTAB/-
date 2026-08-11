@@ -39,6 +39,7 @@ service cloud.firestore {
              data.email is string &&
              (!('role' in data) || data.role in ['mukallaf', 'amin', 'rais']) &&
              (!('displayName' in data) || data.displayName is string) &&
+             (!('allowedTabs' in data) || data.allowedTabs is list) &&
              (!('balance' in data) || data.balance is number);
     }
 
@@ -49,6 +50,7 @@ service cloud.firestore {
              (!('subscriptionDate' in data) || data.subscriptionDate is string) &&
              (!('subscriptionFeePaid' in data) || data.subscriptionFeePaid is number) &&
              (!('balance' in data) || data.balance is number) &&
+             (!('receiptNumber' in data) || data.receiptNumber is string) &&
              (!('createdBy' in data) || data.createdBy is string);
     }
 

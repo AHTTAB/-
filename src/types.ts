@@ -6,6 +6,7 @@ export interface UserProfile {
   role: UserRole;
   displayName: string;
   balance: number;
+  allowedTabs?: string[];
 }
 
 export interface Subscriber {
@@ -16,6 +17,7 @@ export interface Subscriber {
   subscriptionDate: string;
   subscriptionFeePaid: number;
   balance: number;
+  receiptNumber?: string;
   createdBy?: string;
 }
 
