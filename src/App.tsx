@@ -47,7 +47,8 @@ import {
   CreditCard, 
   History, 
   Settings, 
-  AlertCircle 
+  AlertCircle,
+  CheckCircle 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -128,64 +129,203 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscription' | 'irrigation' }>(({ data, type }, ref) => {
   return (
-    <div ref={ref} className="p-8 bg-white text-black font-serif border-2 border-double border-gray-300 m-4 max-w-md mx-auto" dir="rtl">
-      <div className="text-center border-b-2 border-gray-200 pb-4 mb-4">
-        <h1 className="text-2xl font-bold">جمعية مياه السقي</h1>
-        <p className="text-sm opacity-70">وصل {type === 'subscription' ? 'اشتراك' : 'سقي'}</p>
+    <div ref={ref} className="p-8 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-4 max-w-md mx-auto" dir="rtl">
+      <div className="text-center border-b-2 border-emerald-600 pb-4 mb-4 flex flex-col items-center">
+        <img src="/logo.jpg" alt="لوجو الجمعية" className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" />
+        <h1 className="text-xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
+        <p className="text-sm font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+        <span className="inline-block mt-2 px-4 py-1 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-sm rounded-full">
+          وصل {type === 'subscription' ? 'اشتراك' : 'سقي'}
+        </span>
       </div>
       
-      <div className="space-y-3">
-        <div className="flex justify-between">
-          <span className="font-bold">الرقم:</span>
-          <span>{data.receiptNumber || data.id?.slice(-6).toUpperCase()}</span>
+      <div className="space-y-3 text-sm">
+        <div className="flex justify-between border-b border-stone-100 pb-1">
+          <span className="font-bold text-stone-600">رقم الوصل:</span>
+          <span className="font-mono font-bold text-stone-900">{data.receiptNumber || data.id?.slice(-6).toUpperCase()}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="font-bold">التاريخ:</span>
+        <div className="flex justify-between border-b border-stone-100 pb-1">
+          <span className="font-bold text-stone-600">تاريخ الوصل:</span>
           <span>{formatDate(data.date || data.subscriptionDate)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="font-bold">المشترك:</span>
-          <span>{data.name || data.subscriberName}</span>
+        <div className="flex justify-between border-b border-stone-100 pb-1">
+          <span className="font-bold text-stone-600">اسم المشترك:</span>
+          <span className="font-bold text-stone-900">{data.name || data.subscriberName}</span>
         </div>
         
         {type === 'irrigation' && (
           <>
-            <div className="flex justify-between">
-              <span className="font-bold">عدد الساعات:</span>
-              <span>{data.hours} ساعة</span>
+            <div className="flex justify-between border-b border-stone-100 pb-1">
+              <span className="font-bold text-stone-600">عدد الساعات:</span>
+              <span className="font-bold text-stone-900">{data.hours} ساعة</span>
             </div>
-            <div className="flex justify-between">
-              <span className="font-bold">الثمن للساعة:</span>
+            <div className="flex justify-between border-b border-stone-100 pb-1">
+              <span className="font-bold text-stone-600">ثمن الساعة:</span>
               <span>{formatCurrency(IRRIGATION_RATE)}</span>
             </div>
           </>
         )}
         
-        <div className="flex justify-between border-t border-gray-200 pt-2 mt-4">
-          <span className="font-bold text-lg">المبلغ الإجمالي:</span>
-          <span className="text-lg font-bold">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
+        <div className="flex justify-between border-t-2 border-emerald-600 pt-3 mt-4 text-base">
+          <span className="font-black text-stone-900">المبلغ الإجمالي المؤدى:</span>
+          <span className="text-xl font-black text-emerald-700">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
         </div>
       </div>
       
-      <div className="mt-8 flex justify-between items-end">
+      <div className="mt-8 flex justify-between items-end pt-4 border-t border-stone-200">
         <div className="text-center">
-          <p className="text-xs opacity-50 mb-1">توقيع المكلف</p>
-          <div className="w-24 h-12 border border-dashed border-gray-300"></div>
+          <p className="text-xs font-bold text-stone-600 mb-2">توقيع المكلف / أمين المال</p>
+          <div className="w-28 h-16 border border-dashed border-stone-300 rounded-lg"></div>
         </div>
         <div className="text-center">
-          <p className="text-xs opacity-50 mb-1">خاتم الجمعية</p>
-          <div className="w-24 h-24 rounded-full border border-dashed border-gray-300"></div>
+          <p className="text-xs font-bold text-stone-600 mb-2">خاتم الجمعية</p>
+          <div className="w-20 h-20 rounded-full border border-dashed border-stone-300 flex items-center justify-center">
+            <span className="text-[9px] text-stone-400">خاتم الجمعية</span>
+          </div>
         </div>
       </div>
       
-      <div className="mt-8 text-center text-[10px] opacity-30 border-t border-gray-100 pt-2">
-        نظام تسيير الجمعية - {new Date().getFullYear()}
+      <div className="mt-6 text-center text-[11px] text-stone-400 border-t border-stone-100 pt-2 font-medium">
+        جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
       </div>
     </div>
   );
 });
 
 ReceiptPrint.displayName = 'ReceiptPrint';
+
+const ReportPrint = React.forwardRef<HTMLDivElement, { 
+  startDate: string, 
+  endDate: string, 
+  netIrrigation: number, 
+  totalSubscriptions: number, 
+  totalIncome: number, 
+  totalWorkerWagesConfirmed: number,
+  expensesList: Expense[], 
+  totalExpenses: number, 
+  netBalance: number 
+}>(({ startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalWorkerWagesConfirmed, expensesList, totalExpenses, netBalance }, ref) => {
+  return (
+    <div ref={ref} className="p-8 bg-white text-black font-sans max-w-4xl mx-auto border-2 border-stone-200" dir="rtl">
+      {/* Report Header */}
+      <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-6 mb-6">
+        <div className="flex items-center gap-4">
+          <img src="/logo.jpg" alt="لوجو الجمعية" className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" />
+          <div>
+            <h1 className="text-2xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
+            <p className="text-base font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+            <p className="text-xs text-stone-500 mt-1">تقرير مالي وتفصيلي للمداخيل والمصاريف</p>
+          </div>
+        </div>
+        <div className="text-left bg-stone-50 p-4 rounded-xl border border-stone-200 text-xs text-stone-700 space-y-1">
+          <p className="font-bold text-sm text-emerald-800">التقرير المالي</p>
+          <p><span className="font-bold">تاريخ الاستخراج:</span> {new Date().toLocaleDateString('ar-MA')}</p>
+          <p><span className="font-bold">الفترة:</span> {startDate ? formatDate(startDate) : 'البداية'} إلى {endDate ? formatDate(endDate) : 'الحالي'}</p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-8 text-center">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+          <p className="text-xs font-bold text-emerald-800 mb-1">مداخيل السقي (الصافي)</p>
+          <p className="text-lg font-black text-emerald-900">{formatCurrency(netIrrigation)}</p>
+        </div>
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+          <p className="text-xs font-bold text-blue-800 mb-1">أجور العمال المؤداة</p>
+          <p className="text-lg font-black text-blue-900">{formatCurrency(totalWorkerWagesConfirmed)}</p>
+        </div>
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+          <p className="text-xs font-bold text-red-800 mb-1">إجمالي المصاريف</p>
+          <p className="text-lg font-black text-red-900">{formatCurrency(totalExpenses)}</p>
+        </div>
+        <div className="p-3 bg-stone-100 border border-stone-300 rounded-xl">
+          <p className="text-xs font-bold text-stone-800 mb-1">الرصيد المتبقي</p>
+          <p className={`text-lg font-black ${netBalance >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>{formatCurrency(netBalance)}</p>
+        </div>
+      </div>
+
+      {/* Details Sections */}
+      <div className="space-y-6 text-sm">
+        {/* Income Section */}
+        <div className="border border-stone-200 rounded-xl overflow-hidden">
+          <div className="bg-emerald-700 text-white px-4 py-2 font-bold flex justify-between">
+            <span>المداخيل</span>
+            <span>المبلغ (درهم)</span>
+          </div>
+          <div className="p-4 space-y-2">
+            <div className="flex justify-between border-b border-stone-100 pb-2">
+              <span>مداخيل ساعات السقي الصافية</span>
+              <span className="font-bold">{formatCurrency(netIrrigation)}</span>
+            </div>
+            <div className="flex justify-between border-b border-stone-100 pb-2">
+              <span>مداخيل الاشتراكات</span>
+              <span className="font-bold">{formatCurrency(totalSubscriptions)}</span>
+            </div>
+            <div className="flex justify-between font-black text-emerald-800 pt-2 text-base">
+              <span>مجموع المداخيل:</span>
+              <span>{formatCurrency(totalIncome)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Expenses Section */}
+        <div className="border border-stone-200 rounded-xl overflow-hidden">
+          <div className="bg-red-700 text-white px-4 py-2 font-bold flex justify-between">
+            <span>المصاريف</span>
+            <span>المبلغ (درهم)</span>
+          </div>
+          <div className="p-4 space-y-2">
+            {totalWorkerWagesConfirmed > 0 && (
+              <div className="flex justify-between border-b border-stone-100 pb-2 bg-red-50/50 px-2 py-1 rounded">
+                <span>أجور عمال السقي المؤداة والمؤكدة</span>
+                <span className="font-bold text-red-700">{formatCurrency(totalWorkerWagesConfirmed)}</span>
+              </div>
+            )}
+            {expensesList.map(e => (
+              <div key={e.id} className="flex justify-between border-b border-stone-100 pb-2 px-2">
+                <span>{e.description} ({formatDate(e.date)})</span>
+                <span className="font-semibold">{formatCurrency(e.amount)}</span>
+              </div>
+            ))}
+            {expensesList.length === 0 && totalWorkerWagesConfirmed === 0 && (
+              <p className="text-stone-400 italic text-center py-2">لا توجد مصاريف خلال هذه الفترة</p>
+            )}
+            <div className="flex justify-between font-black text-red-800 pt-2 text-base border-t border-stone-200">
+              <span>مجموع المصاريف:</span>
+              <span>{formatCurrency(totalExpenses)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Final Result */}
+        <div className="p-4 bg-stone-100 border-2 border-stone-300 rounded-xl flex justify-between items-center text-lg font-black">
+          <span>النتيجة المالية النهائية (الرصيد المتبقي):</span>
+          <span className={netBalance >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(netBalance)}</span>
+        </div>
+      </div>
+
+      {/* Signatures & Stamp */}
+      <div className="mt-12 grid grid-cols-2 gap-8 pt-6 border-t-2 border-stone-200 text-center">
+        <div>
+          <p className="font-bold text-sm text-stone-800 mb-2">توقيع أمين المال</p>
+          <div className="w-40 h-20 border border-dashed border-stone-300 rounded-lg mx-auto"></div>
+        </div>
+        <div>
+          <p className="font-bold text-sm text-stone-800 mb-2">خاتم وتوقيع الجمعية</p>
+          <div className="w-24 h-24 rounded-full border border-dashed border-stone-300 mx-auto flex items-center justify-center text-xs text-stone-300">
+            خاتم الجمعية
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 text-center text-xs text-stone-400 border-t border-stone-100 pt-3">
+        جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
+      </div>
+    </div>
+  );
+});
+
+ReportPrint.displayName = 'ReportPrint';
 
 const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, title: string, message: string }) => {
   if (!isOpen) return null;
@@ -393,11 +533,10 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-stone-100"
         >
-          <div className="w-20 h-20 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Droplets className="w-10 h-10 text-emerald-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-stone-900 mb-2">نظام تسيير الجمعية</h1>
-          <p className="text-stone-500 mb-6">يرجى تسجيل الدخول للمتابعة</p>
+          <img src="/logo.jpg" alt="لوجو الجمعية" className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" />
+          <h1 className="text-2xl font-black text-stone-900 mb-1">جمعية تيفاوت للتنمية والتعاون</h1>
+          <p className="text-emerald-700 font-bold mb-1">دوار العامرية</p>
+          <p className="text-xs text-stone-500 mb-6">نظام تسيير مياه السقي</p>
           
           {authError && (
             <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100">
@@ -465,7 +604,7 @@ export default function App() {
           </button>
           
           <div className="mt-8 pt-6 border-t border-stone-100">
-            <p className="text-xs text-stone-400">جمعية مياه السقي - جميع الحقوق محفوظة © {new Date().getFullYear()}</p>
+            <p className="text-xs text-stone-400">جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}</p>
           </div>
         </motion.div>
       </div>
@@ -480,12 +619,14 @@ export default function App() {
         ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
         <div className="h-full flex flex-col">
-          <div className="p-6 flex items-center justify-between">
+          <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center">
-                <Droplets className="w-6 h-6 text-white" />
+              <img src="/logo.jpg" alt="لوجو الجمعية" className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold text-sm text-stone-900 leading-tight truncate">جمعية تيفاوت</span>
+                <span className="text-xs font-semibold text-emerald-700 leading-tight">للتنمية والتعاون</span>
+                <span className="text-[10px] text-stone-400 font-medium">دوار العامرية</span>
               </div>
-              <span className="font-bold text-xl text-stone-900">مياه السقي</span>
             </div>
             <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-stone-400 hover:text-stone-600">
               <X className="w-6 h-6" />
@@ -557,7 +698,7 @@ export default function App() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-stone-900 truncate">{profile.displayName}</p>
-                  <p className="text-xs text-stone-500 uppercase tracking-wider">{profile.role === 'amin' ? 'أمين المال' : 'المكلف'}</p>
+                  <p className="text-xs text-stone-500 uppercase tracking-wider">{profile.role === 'amin' ? 'أمين المال' : profile.role === 'rais' ? 'رئيس الجمعية' : 'مكلف بالتحصيل'}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs font-medium text-stone-600">
@@ -578,24 +719,32 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-20 bg-white border-b border-stone-200 flex items-center justify-between px-6 shrink-0">
-          <div className="flex items-center gap-4">
+        <header className="h-20 bg-white border-b border-stone-200 flex items-center justify-between px-6 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-3">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-stone-600">
               <Menu className="w-6 h-6" />
             </button>
-            <h2 className="text-xl font-bold text-stone-900">
-              {activeTab === 'dashboard' && 'لوحة التحكم'}
-              {activeTab === 'subscribers' && 'إدارة المشتركين'}
-              {activeTab === 'irrigation' && 'حصص السقي'}
-              {activeTab === 'expenses' && 'المصاريف'}
-              {activeTab === 'reports' && 'التقارير المالية'}
-              {activeTab === 'transfers' && 'تحويل الرصيد'}
-              {activeTab === 'activity' && 'سجل العمليات'}
-            </h2>
+            <img src="/logo.jpg" alt="لوجو الجمعية" className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" />
+            <div className="flex flex-col">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900 leading-tight flex items-center gap-2">
+                جمعية تيفاوت للتنمية والتعاون
+                <span className="text-[11px] px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-100 hidden sm:inline-block">دوار العامرية</span>
+              </h2>
+              <span className="text-xs text-stone-500 font-medium">
+                {activeTab === 'dashboard' && 'لوحة التحكم'}
+                {activeTab === 'subscribers' && 'إدارة المشتركين'}
+                {activeTab === 'irrigation' && 'حصص السقي'}
+                {activeTab === 'expenses' && 'المصاريف'}
+                {activeTab === 'reports' && 'التقارير المالية'}
+                {activeTab === 'transfers' && 'تحويل الرصيد'}
+                {activeTab === 'activity' && 'سجل العمليات'}
+                {activeTab === 'settings' && 'الإعدادات'}
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex flex-col items-end">
-              <span className="text-xs text-stone-500">{new Date().toLocaleDateString('ar-MA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              <span className="text-xs font-semibold text-stone-600">{new Date().toLocaleDateString('ar-MA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
             </div>
           </div>
         </header>
@@ -1147,6 +1296,15 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm }: { subsc
                         <XCircle className="w-5 h-5" />
                       </button>
                     )}
+                    {session.status === 'paid' && !session.workerWagePaid && profile.role === 'amin' && (
+                      <button 
+                        onClick={() => updateDoc(doc(db, 'sessions', session.id), { workerWagePaid: true })}
+                        className="p-2 text-stone-400 hover:text-blue-600 transition-colors"
+                        title="تأكيد أداء أجرة العامل"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                      </button>
+                    )}
                     <button 
                       onClick={() => {
                         if (confirm('هل أنت متأكد من حذف هذه العملية؟')) {
@@ -1393,6 +1551,11 @@ function ExpensesView({ expenses, profile }: { expenses: Expense[], profile: Use
 function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions: IrrigationSession[], expenses: Expense[], transfers: Transfer[], subscribers: Subscriber[] }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const reportPrintRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintReport = useReactToPrint({
+    contentRef: reportPrintRef,
+  });
 
   const filteredSessions = sessions.filter(s => {
     if (s.status !== 'paid') return false;
@@ -1417,11 +1580,11 @@ function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions:
   });
 
   const totalIrrigation = filteredSessions.reduce((acc, s) => acc + s.totalAmount, 0);
-  const totalWorkerWages = filteredSessions.reduce((acc, s) => acc + s.workerWage, 0);
+  const totalWorkerWagesConfirmed = filteredSessions.reduce((acc, s) => acc + (s.workerWagePaid ? s.workerWage : 0), 0);
   const totalSubscriptions = filteredSubscriptions.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
-  const netIrrigation = totalIrrigation - totalWorkerWages;
+  const netIrrigation = totalIrrigation - totalWorkerWagesConfirmed;
   const totalIncome = netIrrigation + totalSubscriptions;
-  const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+  const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0) + totalWorkerWagesConfirmed;
   const netBalance = totalIncome - totalExpenses;
 
   return (
@@ -1456,8 +1619,16 @@ function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions:
           إعادة تعيين
         </button>
         <button 
+          onClick={() => handlePrintReport()}
+          className="bg-stone-800 hover:bg-stone-900 text-white font-bold py-2 px-6 rounded-xl transition-all flex items-center gap-2 shadow-sm"
+        >
+          <Printer className="w-5 h-5" />
+          طباعة التقرير
+        </button>
+        <button 
           onClick={() => downloadCSV([
             { label: 'مداخيل السقي (الصافي)', value: formatCurrency(netIrrigation) },
+            { label: 'أجور العمال المؤداة', value: formatCurrency(totalWorkerWagesConfirmed) },
             { label: 'إجمالي المصاريف', value: formatCurrency(totalExpenses) },
             { label: 'الرصيد المتبقي', value: formatCurrency(netBalance) }
           ], [
@@ -1471,19 +1642,38 @@ function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions:
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Hidden printable report */}
+      <div className="hidden">
+        <ReportPrint 
+          ref={reportPrintRef} 
+          startDate={startDate} 
+          endDate={endDate} 
+          netIrrigation={netIrrigation} 
+          totalSubscriptions={totalSubscriptions} 
+          totalIncome={totalIncome} 
+          totalWorkerWagesConfirmed={totalWorkerWagesConfirmed} 
+          expensesList={filteredExpenses} 
+          totalExpenses={totalExpenses} 
+          netBalance={netBalance} 
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
           <p className="text-emerald-700 font-medium mb-1">مداخيل السقي (الصافي)</p>
-          <p className="text-3xl font-bold text-emerald-800">{formatCurrency(netIrrigation)}</p>
-          <p className="text-xs text-emerald-600 mt-2">بعد خصم {formatCurrency(totalWorkerWages)} كأجور للعمال</p>
+          <p className="text-2xl font-bold text-emerald-800">{formatCurrency(netIrrigation)}</p>
+        </div>
+        <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+          <p className="text-blue-700 font-medium mb-1">أجور العمال المؤداة</p>
+          <p className="text-2xl font-bold text-blue-800">{formatCurrency(totalWorkerWagesConfirmed)}</p>
         </div>
         <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
           <p className="text-red-700 font-medium mb-1">إجمالي المصاريف</p>
-          <p className="text-3xl font-bold text-red-800">{formatCurrency(totalExpenses)}</p>
+          <p className="text-2xl font-bold text-red-800">{formatCurrency(totalExpenses)}</p>
         </div>
         <div className={`${netBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'} p-6 rounded-3xl border`}>
           <p className={`${netBalance >= 0 ? 'text-blue-700' : 'text-amber-700'} font-medium mb-1`}>الرصيد المتبقي</p>
-          <p className={`text-3xl font-bold ${netBalance >= 0 ? 'text-blue-800' : 'text-amber-800'}`}>{formatCurrency(netBalance)}</p>
+          <p className={`text-2xl font-bold ${netBalance >= 0 ? 'text-blue-800' : 'text-amber-800'}`}>{formatCurrency(netBalance)}</p>
         </div>
       </div>
 
@@ -1545,41 +1735,139 @@ function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions:
 }
 
 
+function UserRowItem({ user }: { user: UserProfile }) {
+  const [displayName, setDisplayName] = useState(user.displayName || '');
+  const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
+  const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(user.displayName || '');
+    setRole(user.role || 'mukallaf');
+  }, [user]);
+
+  const handleUpdate = async () => {
+    if (!displayName.trim()) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        displayName: displayName.trim(),
+        role: role
+      });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to update user profile:', err);
+      alert('حدث خطأ أثناء تحديث بيانات المستخدم');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <tr className="hover:bg-stone-50/50 transition-colors">
+      <td className="px-6 py-4">
+        <input 
+          type="text" 
+          value={displayName} 
+          onChange={(e) => setDisplayName(e.target.value)}
+          className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full max-w-xs"
+          placeholder="اسم المستخدم"
+        />
+      </td>
+      <td className="px-6 py-4 text-right text-stone-600 font-mono text-sm">{user.email}</td>
+      <td className="px-6 py-4">
+        <select 
+          value={role}
+          onChange={(e) => setRole(e.target.value as UserRole)}
+          className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl font-medium text-stone-800"
+        >
+          <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
+          <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
+          <option value="mukallaf">مكلف بالتحصيل والسقي</option>
+        </select>
+      </td>
+      <td className="px-6 py-4 text-center">
+        <button 
+          onClick={handleUpdate}
+          disabled={saving}
+          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 mx-auto ${
+            savedSuccess 
+              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+          }`}
+        >
+          {saving ? 'جاري الحفظ...' : savedSuccess ? (
+            <>
+              <CheckCircle className="w-4 h-4" />
+              تم الحفظ
+            </>
+          ) : (
+            'حفظ البيانات'
+          )}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 function UserManagementView({ users }: { users: UserProfile[] }) {
   return (
-    <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
-      <h3 className="text-xl font-bold text-stone-900">إدارة المستخدمين والصلاحيات</h3>
-      <table className="w-full text-right">
-        <thead>
-          <tr className="bg-stone-50 border-b border-stone-200">
-            <th className="px-6 py-4 font-bold text-stone-600">الاسم</th>
-            <th className="px-6 py-4 font-bold text-stone-600">البريد الإلكتروني</th>
-            <th className="px-6 py-4 font-bold text-stone-600">الدور</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-stone-100">
-          {users.map(u => (
-            <tr key={u.uid}>
-              <td className="px-6 py-4">{u.displayName}</td>
-              <td className="px-6 py-4">{u.email}</td>
-              <td className="px-6 py-4">
-                <select 
-                  value={u.role}
-                  onChange={async (e) => {
-                    await updateDoc(doc(db, 'users', u.uid), { role: e.target.value as UserRole });
-                  }}
-                  className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl"
-                >
-                  <option value="mukallaf">مكلف</option>
-                  <option value="amin">أمين المال</option>
-                  <option value="rais">الرئيس</option>
-                </select>
-              </td>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+        <div>
+          <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+            إدارة المستخدمين والصلاحيات
+            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة أمين المال</span>
+          </h3>
+          <p className="text-sm text-stone-500 mt-1">يمكن لأمين المال تعديل أسماء المستخدمين وتحديد صفاتهم وصلاحياتهم في التطبيق.</p>
+        </div>
+        <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700">
+          إجمالي المستخدمين: {users.length}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-right">
+          <thead>
+            <tr className="bg-stone-50 border-b border-stone-200 text-stone-600">
+              <th className="px-6 py-4 font-bold">الاسم الكامل في التطبيق</th>
+              <th className="px-6 py-4 font-bold">البريد الإلكتروني</th>
+              <th className="px-6 py-4 font-bold">الدور والصلاحية</th>
+              <th className="px-6 py-4 font-bold text-center">التحديث</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-stone-100">
+            {users.map(u => (
+              <UserRowItem key={u.uid} user={u} />
+            ))}
+            {users.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-6 py-8 text-center text-stone-400">لا يوجد مستخدمون مسجلون بعد</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs text-stone-600">
+        <p className="font-bold text-stone-800 text-sm mb-1">دليل الأدوار والصلاحيات:</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-emerald-800 block mb-1">أمين المال (المسؤول)</span>
+            المسؤول المالي عن الجمعية، له الصلاحية الكاملة لإدارة الإعدادات والأسماء والأدوار وتأكيد أجور العمال والتحويلات.
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-blue-800 block mb-1">رئيس الجمعية</span>
+            له صلاحية الاطلاع والمراقبة وتتبع العمليات واستخراج التقارير دون تعديل الإعدادات.
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-stone-800 block mb-1">مكلف بالتحصيل والسقي</span>
+            مكلف بتسجيل المشتركين واستيفاء أجور حصص السقي وإدارة العمليات الميدانية.
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 

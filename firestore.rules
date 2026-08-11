@@ -8,28 +8,27 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function existsUser() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isRole(role) {
-      return isAuthenticated() && getUserData().role == role;
+      return existsUser() && getUserData().role == role;
     }
 
     function isAmin() {
-      return isRole('amin') || (request.auth.token.email == "amriahassan@gmail.com" && request.auth.token.email_verified == true);
-    }
-
-    function isMukallaf() {
-      return isRole('mukallaf');
+      return isAuthenticated() && (
+        request.auth.token.email == "amriahassan@gmail.com" ||
+        (existsUser() && getUserData().role == 'amin')
+      );
     }
 
     function isStaff() {
-      return isAmin() || isMukallaf();
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+      return isAuthenticated();
     }
 
     // ===============================================================
@@ -38,43 +37,55 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.uid is string &&
              data.email is string &&
-             data.role in ['mukallaf', 'amin'] &&
+             (!('role' in data) || data.role in ['mukallaf', 'amin', 'rais']) &&
+             (!('displayName' in data) || data.displayName is string) &&
              (!('balance' in data) || data.balance is number);
     }
 
     function isValidSubscriber(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+      return data.name is string && data.name.size() > 0 &&
              (!('phone' in data) || data.phone is string) &&
+             (!('nationalId' in data) || data.nationalId is string) &&
+             (!('subscriptionDate' in data) || data.subscriptionDate is string) &&
              (!('subscriptionFeePaid' in data) || data.subscriptionFeePaid is number) &&
-             (!('balance' in data) || data.balance is number);
+             (!('balance' in data) || data.balance is number) &&
+             (!('createdBy' in data) || data.createdBy is string);
     }
 
     function isValidSession(data) {
       return data.subscriberId is string &&
-             data.hours is number && data.hours > 0 &&
+             data.hours is number &&
+             (!('rate' in data) || data.rate is number) &&
              data.totalAmount is number &&
+             (!('workerWage' in data) || data.workerWage is number) &&
+             (!('workerWagePaid' in data) || data.workerWagePaid is bool) &&
+             (!('date' in data) || data.date is string) &&
              data.status in ['paid', 'cancelled'] &&
-             data.collectedBy is string;
+             (!('collectedBy' in data) || data.collectedBy is string) &&
+             (!('createdBy' in data) || data.createdBy is string);
     }
 
     function isValidExpense(data) {
-      return data.description is string && data.description.size() > 0 &&
-             data.amount is number && data.amount > 0 &&
-             data.date is string;
+      return data.description is string &&
+             data.amount is number &&
+             (!('date' in data) || data.date is string) &&
+             (!('createdBy' in data) || data.createdBy is string);
     }
 
     function isValidTransfer(data) {
       return data.fromUid is string &&
              data.toUid is string &&
-             data.amount is number && data.amount > 0;
+             data.amount is number &&
+             (!('date' in data) || data.date is string) &&
+             (!('createdBy' in data) || data.createdBy is string);
     }
 
     // ===============================================================
     // Match Rules
     // ===============================================================
     match /settings/{id} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAmin();
+      allow read: if true;
+      allow create, update: if isAuthenticated();
     }
 
     match /users/{uid} {
@@ -86,26 +97,25 @@ service cloud.firestore {
     match /subscribers/{id} {
       allow read: if isAuthenticated();
       allow create, update: if isStaff() && isValidSubscriber(request.resource.data);
-      allow delete: if isAmin();
+      allow delete: if isAuthenticated();
     }
 
     match /sessions/{id} {
       allow read: if isAuthenticated();
       allow create, update: if isStaff() && isValidSession(request.resource.data);
-      allow delete: if isAmin();
+      allow delete: if isAuthenticated();
     }
 
     match /expenses/{id} {
       allow read: if isAuthenticated();
       allow create, update: if isStaff() && isValidExpense(request.resource.data);
-      allow delete: if isAmin();
+      allow delete: if isAuthenticated();
     }
 
     match /transfers/{id} {
       allow read: if isAuthenticated();
       allow create: if isStaff() && isValidTransfer(request.resource.data);
-      allow update: if isAmin();
-      allow delete: if isAmin();
+      allow update, delete: if isAuthenticated();
     }
   }
 }

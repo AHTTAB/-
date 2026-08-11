@@ -7,12 +7,16 @@ export let IRRIGATION_RATE = 45;
 export let WORKER_WAGE_PER_HOUR = 12;
 
 export const loadSettings = async () => {
-  const settingsDoc = await getDoc(doc(db, 'settings', 'config'));
-  if (settingsDoc.exists()) {
-    const data = settingsDoc.data();
-    SUBSCRIPTION_FEE = data.subscriptionFee || 300;
-    IRRIGATION_RATE = data.irrigationRate || 45;
-    WORKER_WAGE_PER_HOUR = data.workerWagePerHour || 12;
+  try {
+    const settingsDoc = await getDoc(doc(db, 'settings', 'config'));
+    if (settingsDoc.exists()) {
+      const data = settingsDoc.data();
+      SUBSCRIPTION_FEE = data.subscriptionFee || 300;
+      IRRIGATION_RATE = data.irrigationRate || 45;
+      WORKER_WAGE_PER_HOUR = data.workerWagePerHour || 12;
+    }
+  } catch (err) {
+    console.warn("Could not load settings:", err);
   }
 };
 

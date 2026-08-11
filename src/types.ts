@@ -27,6 +27,7 @@ export interface IrrigationSession {
   rate: number;
   totalAmount: number;
   workerWage: number;
+  workerWagePaid?: boolean;
   date: string;
   status: 'paid' | 'cancelled';
   collectedBy: string;
