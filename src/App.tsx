@@ -76,6 +76,38 @@ import {
   loadSettings,
   saveSettings
 } from './constants';
+import { LOGO_BASE64 } from './logoData';
+
+function SafePrintImage({ 
+  src, 
+  alt, 
+  className, 
+  fallbackText 
+}: { 
+  src?: string, 
+  alt: string, 
+  className?: string, 
+  fallbackText?: string 
+}) {
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setHasError(false);
+  }, [src]);
+
+  if (!src || hasError) {
+    return <span className="text-[10px] text-stone-400 font-medium text-center">{fallbackText || alt}</span>;
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt={alt} 
+      className={className} 
+      onError={() => setHasError(true)} 
+    />
+  );
+}
 
 // --- Error Handling ---
 enum OperationType {
@@ -135,15 +167,12 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
   const receiptNo = data.receiptNumber || (type === 'subscription' ? `SUB-${(data.id || '000000').slice(-6).toUpperCase()}` : `IRR-${(data.id || '000000').slice(-6).toUpperCase()}`);
   const collectorSignature = data.collectorSignatureUrl || data.collectorSignature;
   const assocSignature = data.associationSignatureUrl || ASSOCIATION_SIGNATURE_URL;
-  const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpg` : '/logo.jpg';
 
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-4 max-w-md mx-auto" dir="rtl">
       <div className="text-center border-b-2 border-emerald-600 pb-4 mb-4 flex flex-col items-center">
         <img 
-          src={logoUrl} 
-          referrerPolicy="no-referrer"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+          src={LOGO_BASE64} 
           alt="لوجو الجمعية" 
           className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" 
         />
@@ -198,33 +227,23 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
         <div className="text-center flex flex-col items-center">
           <p className="text-xs font-bold text-stone-600 mb-2">توقيع المكلف / أمين المال</p>
           <div className="w-28 h-16 border border-dashed border-stone-300 rounded-lg flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
-            {collectorSignature ? (
-              <img 
-                src={collectorSignature} 
-                alt="توقيع المكلف" 
-                referrerPolicy="no-referrer"
-                className="max-w-full max-h-full object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : (
-              <span className="text-[10px] text-stone-400">توقيع المكلف</span>
-            )}
+            <SafePrintImage 
+              src={collectorSignature} 
+              alt="توقيع المكلف" 
+              className="max-w-full max-h-full object-contain"
+              fallbackText="توقيع المكلف"
+            />
           </div>
         </div>
         <div className="text-center flex flex-col items-center">
           <p className="text-xs font-bold text-stone-600 mb-2">خاتم الجمعية</p>
           <div className="w-20 h-20 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
-            {assocSignature ? (
-              <img 
-                src={assocSignature} 
-                alt="خاتم الجمعية" 
-                referrerPolicy="no-referrer"
-                className="max-w-full max-h-full object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : (
-              <span className="text-[9px] text-stone-400">خاتم الجمعية</span>
-            )}
+            <SafePrintImage 
+              src={assocSignature} 
+              alt="خاتم الجمعية" 
+              className="max-w-full max-h-full object-contain"
+              fallbackText="خاتم الجمعية"
+            />
           </div>
         </div>
       </div>
@@ -249,16 +268,13 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
   totalExpenses: number, 
   netBalance: number 
 }>(({ startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalWorkerWagesConfirmed, expensesList, totalExpenses, netBalance }, ref) => {
-  const logoUrl = typeof window !== 'undefined' ? `${window.location.origin}/logo.jpg` : '/logo.jpg';
   return (
     <div ref={ref} className="p-8 bg-white text-black font-sans max-w-4xl mx-auto border-2 border-stone-200" dir="rtl">
       {/* Report Header */}
       <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-6 mb-6">
         <div className="flex items-center gap-4">
           <img 
-            src={logoUrl} 
-            referrerPolicy="no-referrer"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+            src={LOGO_BASE64} 
             alt="لوجو الجمعية" 
             className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" 
           />
@@ -620,9 +636,7 @@ export default function App() {
           className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-stone-100"
         >
           <img 
-            src="/logo.jpg" 
-            referrerPolicy="no-referrer"
-            onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+            src={LOGO_BASE64} 
             alt="لوجو الجمعية" 
             className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" 
           />
@@ -714,9 +728,7 @@ export default function App() {
           <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img 
-                src="/logo.jpg" 
-                referrerPolicy="no-referrer"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                src={LOGO_BASE64} 
                 alt="لوجو الجمعية" 
                 className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
               />
@@ -837,9 +849,7 @@ export default function App() {
               <Menu className="w-6 h-6" />
             </button>
             <img 
-              src="/logo.jpg" 
-              referrerPolicy="no-referrer"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+              src={LOGO_BASE64} 
               alt="لوجو الجمعية" 
               className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
             />
@@ -2361,14 +2371,37 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
           <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={workerWage} onChange={(e) => setWorkerWage(Number(e.target.value))} />
         </div>
         <div>
-          <label className="block text-sm font-bold text-stone-700 mb-2">رابط صورة توقيع / خاتم الجمعية (للطباعة في الوصل)</label>
-          <input 
-            type="url" 
-            className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl dir-ltr font-mono text-xs" 
-            placeholder="https://.../stamp.png"
-            value={assocSignature} 
-            onChange={(e) => setAssocSignature(e.target.value)} 
-          />
+          <label className="block text-sm font-bold text-stone-700 mb-2">توقيع / خاتم الجمعية الرسمية (للطباعة في الوصل)</label>
+          <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl dir-ltr font-mono text-xs" 
+              placeholder="رابط أو اختر صورة الخاتم"
+              value={assocSignature} 
+              onChange={(e) => setAssocSignature(e.target.value)} 
+            />
+            <label className="cursor-pointer px-4 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1.5 transition-colors">
+              <Upload className="w-4 h-4 text-emerald-700" />
+              <span>رفع صورة</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      if (event.target?.result) {
+                        setAssocSignature(event.target.result as string);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="hidden" 
+              />
+            </label>
+          </div>
           {assocSignature && (
             <div className="mt-2 p-2 bg-stone-50 border border-stone-200 rounded-xl flex items-center gap-3">
               <img 
