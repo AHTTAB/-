@@ -51,7 +51,8 @@ import {
   CheckCircle,
   Lock,
   Shield,
-  Upload
+  Upload,
+  PenTool
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -89,23 +90,195 @@ function SafePrintImage({
   className?: string, 
   fallbackText?: string 
 }) {
-  const [hasError, setHasError] = useState(false);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    setHasError(false);
+    if (!src || !src.trim()) {
+      setLoadedSrc(null);
+      return;
+    }
+
+    const cleanSrc = src.trim();
+    if (cleanSrc.startsWith('data:image/')) {
+      setLoadedSrc(cleanSrc);
+      return;
+    }
+
+    let isMounted = true;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = cleanSrc;
+    img.onload = () => {
+      if (isMounted) setLoadedSrc(cleanSrc);
+    };
+    img.onerror = () => {
+      if (isMounted) setLoadedSrc(null);
+    };
+
+    return () => {
+      isMounted = false;
+    };
   }, [src]);
 
-  if (!src || hasError) {
-    return <span className="text-[10px] text-stone-400 font-medium text-center">{fallbackText || alt}</span>;
+  if (!loadedSrc) {
+    return <span className="text-[10px] text-stone-400 font-medium text-center block select-none px-1 py-0.5">{fallbackText || alt}</span>;
   }
 
   return (
     <img 
-      src={src} 
+      src={loadedSrc} 
       alt={alt} 
       className={className} 
-      onError={() => setHasError(true)} 
     />
+  );
+}
+
+function SignaturePadModal({
+  isOpen,
+  onClose,
+  onSave,
+  title = 'رسم التوقيع باليد'
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (dataUrl: string) => void;
+  title?: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#065f46';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+      }
+      setHasDrawn(false);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    setIsDrawing(true);
+    setHasDrawn(true);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#065f46';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+    setHasDrawn(false);
+  };
+
+  const handleConfirm = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !hasDrawn) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    onSave(dataUrl);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200 space-y-4 text-right" dir="rtl">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <h3 className="text-lg font-bold text-stone-900">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded-full text-stone-500">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-xs text-stone-500">ارسم توقيعك بيدك أو باللمس في المربع أسفله:</p>
+
+        <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-2 bg-stone-50 touch-none flex justify-center">
+          <canvas
+            ref={canvasRef}
+            width={340}
+            height={150}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+            onTouchStart={startDrawing}
+            onTouchMove={draw}
+            onTouchEnd={stopDrawing}
+            className="bg-white rounded-xl shadow-xs cursor-crosshair border border-stone-200"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button
+            type="button"
+            onClick={handleClear}
+            className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
+          >
+            مسح
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-bold rounded-xl transition-colors"
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              disabled={!hasDrawn}
+              onClick={handleConfirm}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-colors shadow-xs"
+            >
+              اعتماد التوقيع
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2032,6 +2205,7 @@ function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, 
   const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSigPadOpen, setIsSigPadOpen] = useState(false);
 
   const isSelf = currentUser?.uid === user.uid;
   const canEditProfile = isAmin || isSelf;
@@ -2130,27 +2304,37 @@ function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, 
                 placeholder="رابط أو اختر صورة"
               />
               {canEditProfile && (
-                <label className="cursor-pointer px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1.5 transition-colors">
-                  <Upload className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>رفع صورة</span>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          if (event.target?.result) {
-                            setSignatureUrl(event.target.result as string);
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                    className="hidden" 
-                  />
-                </label>
+                <>
+                  <label className="cursor-pointer px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1 transition-colors">
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>رفع</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            if (event.target?.result) {
+                              setSignatureUrl(event.target.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsSigPadOpen(true)}
+                    className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1 transition-colors"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-stone-700" />
+                    <span>رسم</span>
+                  </button>
+                </>
               )}
               {signatureUrl && (
                 <img 
@@ -2164,6 +2348,13 @@ function UserRowItem({ user, currentUser, isAmin = true }: { user: UserProfile, 
             </div>
           </div>
         </div>
+
+        <SignaturePadModal
+          isOpen={isSigPadOpen}
+          onClose={() => setIsSigPadOpen(false)}
+          onSave={(dataUrl) => setSignatureUrl(dataUrl)}
+          title={`رسم توقيع ${displayName || user.email}`}
+        />
 
         {canEditProfile && (
           <button 
@@ -2339,6 +2530,7 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
   const [workerWage, setWorkerWage] = useState(WORKER_WAGE_PER_HOUR);
   const [assocSignature, setAssocSignature] = useState(ASSOCIATION_SIGNATURE_URL);
   const [saving, setSaving] = useState(false);
+  const [isSigPadOpen, setIsSigPadOpen] = useState(false);
 
   useEffect(() => {
     setSubFee(SUBSCRIPTION_FEE);
@@ -2380,9 +2572,9 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
               value={assocSignature} 
               onChange={(e) => setAssocSignature(e.target.value)} 
             />
-            <label className="cursor-pointer px-4 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1.5 transition-colors">
+            <label className="cursor-pointer px-3 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1 transition-colors">
               <Upload className="w-4 h-4 text-emerald-700" />
-              <span>رفع صورة</span>
+              <span>رفع</span>
               <input 
                 type="file" 
                 accept="image/*" 
@@ -2401,6 +2593,14 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
                 className="hidden" 
               />
             </label>
+            <button
+              type="button"
+              onClick={() => setIsSigPadOpen(true)}
+              className="px-3 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1 transition-colors"
+            >
+              <PenTool className="w-4 h-4 text-stone-700" />
+              <span>رسم</span>
+            </button>
           </div>
           {assocSignature && (
             <div className="mt-2 p-2 bg-stone-50 border border-stone-200 rounded-xl flex items-center gap-3">
@@ -2420,9 +2620,16 @@ function SettingsView({ users, profile }: { users: UserProfile[], profile?: User
           disabled={saving}
           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all"
         >
-          {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+          {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </button>
       </motion.div>
+
+      <SignaturePadModal
+        isOpen={isSigPadOpen}
+        onClose={() => setIsSigPadOpen(false)}
+        onSave={(dataUrl) => setAssocSignature(dataUrl)}
+        title="رسم خاتم / توقيع الجمعية"
+      />
       <UserManagementView users={users} profile={profile} />
     </div>
   );
