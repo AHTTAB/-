@@ -342,24 +342,24 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
   const assocSignature = data.associationSignatureUrl || ASSOCIATION_SIGNATURE_URL;
 
   return (
-    <div ref={ref} className="p-4 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-2 mx-auto w-full max-w-[300px] print:w-[300px] print:max-w-[300px] print:p-2" dir="rtl">
-      <div className="text-center border-b-2 border-emerald-600 pb-2 mb-2 flex flex-col items-center">
+    <div ref={ref} className="p-2 bg-white text-black font-sans border-2 border-emerald-700 rounded-sm m-1 mx-auto w-full max-w-[220px] print:w-[220px] print:max-w-[220px] print:p-1" dir="rtl">
+      <div className="text-center border-b-2 border-emerald-600 pb-1 mb-1 flex flex-col items-center">
         <img 
           src={LOGO_BASE64} 
           alt="لوجو الجمعية" 
-          className="w-16 h-16 object-contain mb-1 rounded-full border border-emerald-500 shadow-xs" 
+          className="w-12 h-12 object-contain mb-0.5 rounded-full border border-emerald-500 shadow-xs" 
         />
-        <h1 className="text-lg font-black text-stone-900 leading-tight">جمعية تيفاوت للتنمية والتعاون</h1>
-        <p className="text-xs font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
-        <span className="inline-block mt-1 px-3 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-xs rounded-full">
+        <h1 className="text-sm font-black text-stone-900 leading-tight">جمعية تيفاوت للتنمية والتعاون</h1>
+        <p className="text-[9px] font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+        <span className="inline-block mt-0.5 px-2 py-0 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-[10px] rounded-full">
           وصل {type === 'subscription' ? 'اشتراك' : 'سقي'}
         </span>
       </div>
       
-      <div className="space-y-1.5 text-xs">
+      <div className="space-y-1 text-[10px]">
         <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">رقم الوصل:</span>
-          <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0 rounded border border-emerald-200">{receiptNo}</span>
+          <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1 py-0 rounded border border-emerald-200">{receiptNo}</span>
         </div>
         <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">تاريخ الوصل:</span>
@@ -367,13 +367,13 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
         </div>
         <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">اسم المشترك:</span>
-          <span className="font-bold text-stone-900 truncate max-w-[150px]">{data.name || data.subscriberName}</span>
+          <span className="font-bold text-stone-900 truncate max-w-[100px]">{data.name || data.subscriberName}</span>
         </div>
         
         {data.collectorName && (
           <div className="flex justify-between border-b border-stone-100 pb-0.5">
-            <span className="font-bold text-stone-600">المكلف بالمستحقات:</span>
-            <span className="font-bold text-stone-900 truncate max-w-[120px]">{data.collectorName}</span>
+            <span className="font-bold text-stone-600">المكلف:</span>
+            <span className="font-bold text-stone-900 truncate max-w-[100px]">{data.collectorName}</span>
           </div>
         )}
         
@@ -390,16 +390,16 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
           </>
         )}
         
-        <div className="flex justify-between border-t-2 border-emerald-600 pt-2 mt-2 text-sm">
+        <div className="flex justify-between border-t-2 border-emerald-600 pt-1 mt-1 text-[11px]">
           <span className="font-black text-stone-900">المبلغ الإجمالي:</span>
-          <span className="text-lg font-black text-emerald-700">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
+          <span className="text-sm font-black text-emerald-700">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
         </div>
       </div>
       
-      <div className="mt-4 flex justify-between items-end pt-2 border-t border-stone-200">
+      <div className="mt-2 flex justify-between items-end pt-1 border-t border-stone-200">
         <div className="text-center flex flex-col items-center">
-          <p className="text-[10px] font-bold text-stone-600 mb-1">توقيع المكلف</p>
-          <div className="w-20 h-12 border border-dashed border-stone-300 rounded-lg flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
+          <p className="text-[8px] font-bold text-stone-600 mb-0.5">توقيع المكلف</p>
+          <div className="w-16 h-8 border border-dashed border-stone-300 rounded-sm flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
             <SafePrintImage 
               src={collectorSignature} 
               alt="توقيع المكلف" 
@@ -409,8 +409,8 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
           </div>
         </div>
         <div className="text-center flex flex-col items-center">
-          <p className="text-[10px] font-bold text-stone-600 mb-1">خاتم الجمعية</p>
-          <div className="w-16 h-16 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
+          <p className="text-[8px] font-bold text-stone-600 mb-0.5">خاتم الجمعية</p>
+          <div className="w-12 h-12 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
             <SafePrintImage 
               src={assocSignature} 
               alt="خاتم الجمعية" 
@@ -421,8 +421,8 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
         </div>
       </div>
       
-      <div className="mt-3 text-center text-[10px] text-stone-400 border-t border-stone-100 pt-1 font-medium">
-        جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
+      <div className="mt-1 text-center text-[8px] text-stone-400 border-t border-stone-100 pt-0.5 font-medium">
+        جمعية تيفاوت للتنمية والتعاون © {new Date().getFullYear()}
       </div>
     </div>
   );
