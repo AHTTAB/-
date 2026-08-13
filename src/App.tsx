@@ -342,86 +342,86 @@ const ReceiptPrint = React.forwardRef<HTMLDivElement, { data: any, type: 'subscr
   const assocSignature = data.associationSignatureUrl || ASSOCIATION_SIGNATURE_URL;
 
   return (
-    <div ref={ref} className="p-8 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-4 max-w-md mx-auto" dir="rtl">
-      <div className="text-center border-b-2 border-emerald-600 pb-4 mb-4 flex flex-col items-center">
+    <div ref={ref} className="p-4 bg-white text-black font-sans border-2 border-emerald-700 rounded-xl m-2 mx-auto w-full max-w-[300px] print:w-[300px] print:max-w-[300px] print:p-2" dir="rtl">
+      <div className="text-center border-b-2 border-emerald-600 pb-2 mb-2 flex flex-col items-center">
         <img 
           src={LOGO_BASE64} 
           alt="لوجو الجمعية" 
-          className="w-20 h-20 object-contain mb-2 rounded-full border border-emerald-500 shadow-xs" 
+          className="w-16 h-16 object-contain mb-1 rounded-full border border-emerald-500 shadow-xs" 
         />
-        <h1 className="text-xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
-        <p className="text-sm font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
-        <span className="inline-block mt-2 px-4 py-1 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-sm rounded-full">
+        <h1 className="text-lg font-black text-stone-900 leading-tight">جمعية تيفاوت للتنمية والتعاون</h1>
+        <p className="text-xs font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+        <span className="inline-block mt-1 px-3 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-900 font-extrabold text-xs rounded-full">
           وصل {type === 'subscription' ? 'اشتراك' : 'سقي'}
         </span>
       </div>
       
-      <div className="space-y-3 text-sm">
-        <div className="flex justify-between border-b border-stone-100 pb-1">
+      <div className="space-y-1.5 text-xs">
+        <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">رقم الوصل:</span>
-          <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{receiptNo}</span>
+          <span className="font-mono font-bold text-emerald-900 bg-emerald-50 px-1.5 py-0 rounded border border-emerald-200">{receiptNo}</span>
         </div>
-        <div className="flex justify-between border-b border-stone-100 pb-1">
+        <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">تاريخ الوصل:</span>
           <span>{formatDate(data.date || data.subscriptionDate)}</span>
         </div>
-        <div className="flex justify-between border-b border-stone-100 pb-1">
+        <div className="flex justify-between border-b border-stone-100 pb-0.5">
           <span className="font-bold text-stone-600">اسم المشترك:</span>
-          <span className="font-bold text-stone-900">{data.name || data.subscriberName}</span>
+          <span className="font-bold text-stone-900 truncate max-w-[150px]">{data.name || data.subscriberName}</span>
         </div>
         
         {data.collectorName && (
-          <div className="flex justify-between border-b border-stone-100 pb-1">
+          <div className="flex justify-between border-b border-stone-100 pb-0.5">
             <span className="font-bold text-stone-600">المكلف بالمستحقات:</span>
-            <span className="font-bold text-stone-900">{data.collectorName}</span>
+            <span className="font-bold text-stone-900 truncate max-w-[120px]">{data.collectorName}</span>
           </div>
         )}
         
         {type === 'irrigation' && (
           <>
-            <div className="flex justify-between border-b border-stone-100 pb-1">
+            <div className="flex justify-between border-b border-stone-100 pb-0.5">
               <span className="font-bold text-stone-600">عدد الساعات:</span>
               <span className="font-bold text-stone-900">{data.hours} ساعة</span>
             </div>
-            <div className="flex justify-between border-b border-stone-100 pb-1">
+            <div className="flex justify-between border-b border-stone-100 pb-0.5">
               <span className="font-bold text-stone-600">ثمن الساعة:</span>
               <span>{formatCurrency(IRRIGATION_RATE)}</span>
             </div>
           </>
         )}
         
-        <div className="flex justify-between border-t-2 border-emerald-600 pt-3 mt-4 text-base">
-          <span className="font-black text-stone-900">المبلغ الإجمالي المؤدى:</span>
-          <span className="text-xl font-black text-emerald-700">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
+        <div className="flex justify-between border-t-2 border-emerald-600 pt-2 mt-2 text-sm">
+          <span className="font-black text-stone-900">المبلغ الإجمالي:</span>
+          <span className="text-lg font-black text-emerald-700">{formatCurrency(data.totalAmount || data.subscriptionFeePaid)}</span>
         </div>
       </div>
       
-      <div className="mt-8 flex justify-between items-end pt-4 border-t border-stone-200">
+      <div className="mt-4 flex justify-between items-end pt-2 border-t border-stone-200">
         <div className="text-center flex flex-col items-center">
-          <p className="text-xs font-bold text-stone-600 mb-2">توقيع المكلف / أمين المال</p>
-          <div className="w-28 h-16 border border-dashed border-stone-300 rounded-lg flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
+          <p className="text-[10px] font-bold text-stone-600 mb-1">توقيع المكلف</p>
+          <div className="w-20 h-12 border border-dashed border-stone-300 rounded-lg flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
             <SafePrintImage 
               src={collectorSignature} 
               alt="توقيع المكلف" 
               className="max-w-full max-h-full object-contain"
-              fallbackText="توقيع المكلف"
+              fallbackText="توقيع"
             />
           </div>
         </div>
         <div className="text-center flex flex-col items-center">
-          <p className="text-xs font-bold text-stone-600 mb-2">خاتم الجمعية</p>
-          <div className="w-20 h-20 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-1 bg-stone-50/50 overflow-hidden">
+          <p className="text-[10px] font-bold text-stone-600 mb-1">خاتم الجمعية</p>
+          <div className="w-16 h-16 rounded-full border border-dashed border-stone-300 flex items-center justify-center p-0.5 bg-stone-50/50 overflow-hidden">
             <SafePrintImage 
               src={assocSignature} 
               alt="خاتم الجمعية" 
               className="max-w-full max-h-full object-contain"
-              fallbackText="خاتم الجمعية"
+              fallbackText="خاتم"
             />
           </div>
         </div>
       </div>
       
-      <div className="mt-6 text-center text-[11px] text-stone-400 border-t border-stone-100 pt-2 font-medium">
+      <div className="mt-3 text-center text-[10px] text-stone-400 border-t border-stone-100 pt-1 font-medium">
         جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
       </div>
     </div>
@@ -442,66 +442,66 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
   netBalance: number 
 }>(({ startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalWorkerWagesConfirmed, expensesList, totalExpenses, netBalance }, ref) => {
   return (
-    <div ref={ref} className="p-8 bg-white text-black font-sans max-w-4xl mx-auto border-2 border-stone-200" dir="rtl">
+    <div ref={ref} className="p-4 bg-white text-black font-sans w-full max-w-4xl mx-auto border border-stone-200 print:w-full print:max-w-none print:p-2" dir="rtl">
       {/* Report Header */}
-      <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-6 mb-6">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-4 mb-4">
+        <div className="flex items-center gap-3">
           <img 
             src={LOGO_BASE64} 
             alt="لوجو الجمعية" 
-            className="w-20 h-20 object-contain rounded-full border border-emerald-500 shadow-xs" 
+            className="w-16 h-16 object-contain rounded-full border border-emerald-500 shadow-xs" 
           />
           <div>
-            <h1 className="text-2xl font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
-            <p className="text-base font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
-            <p className="text-xs text-stone-500 mt-1">تقرير مالي وتفصيلي للمداخيل والمصاريف</p>
+            <h1 className="text-lg font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
+            <p className="text-xs font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+            <p className="text-[10px] text-stone-500 mt-0.5">تقرير مالي وتفصيلي للمداخيل والمصاريف</p>
           </div>
         </div>
-        <div className="text-left bg-stone-50 p-4 rounded-xl border border-stone-200 text-xs text-stone-700 space-y-1">
-          <p className="font-bold text-sm text-emerald-800">التقرير المالي</p>
+        <div className="text-left bg-stone-50 p-2 rounded-lg border border-stone-200 text-[10px] text-stone-700 space-y-0.5">
+          <p className="font-bold text-xs text-emerald-800">التقرير المالي</p>
           <p><span className="font-bold">تاريخ الاستخراج:</span> {new Date().toLocaleDateString('ar-MA')}</p>
           <p><span className="font-bold">الفترة:</span> {startDate ? formatDate(startDate) : 'البداية'} إلى {endDate ? formatDate(endDate) : 'الحالي'}</p>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8 text-center">
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-          <p className="text-xs font-bold text-emerald-800 mb-1">مداخيل السقي (الصافي)</p>
-          <p className="text-lg font-black text-emerald-900">{formatCurrency(netIrrigation)}</p>
+      <div className="grid grid-cols-4 gap-2 mb-4 text-center">
+        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-[10px] font-bold text-emerald-800">مداخيل السقي</p>
+          <p className="text-sm font-black text-emerald-900">{formatCurrency(netIrrigation)}</p>
         </div>
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-          <p className="text-xs font-bold text-blue-800 mb-1">أجور العمال المؤداة</p>
-          <p className="text-lg font-black text-blue-900">{formatCurrency(totalWorkerWagesConfirmed)}</p>
+        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-[10px] font-bold text-blue-800">أجور العمال</p>
+          <p className="text-sm font-black text-blue-900">{formatCurrency(totalWorkerWagesConfirmed)}</p>
         </div>
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
-          <p className="text-xs font-bold text-red-800 mb-1">إجمالي المصاريف</p>
-          <p className="text-lg font-black text-red-900">{formatCurrency(totalExpenses)}</p>
+        <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-[10px] font-bold text-red-800">إجمالي المصاريف</p>
+          <p className="text-sm font-black text-red-900">{formatCurrency(totalExpenses)}</p>
         </div>
-        <div className="p-3 bg-stone-100 border border-stone-300 rounded-xl">
-          <p className="text-xs font-bold text-stone-800 mb-1">الرصيد المتبقي</p>
-          <p className={`text-lg font-black ${netBalance >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>{formatCurrency(netBalance)}</p>
+        <div className="p-2 bg-stone-100 border border-stone-300 rounded-lg">
+          <p className="text-[10px] font-bold text-stone-800">الرصيد المتبقي</p>
+          <p className={`text-sm font-black ${netBalance >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>{formatCurrency(netBalance)}</p>
         </div>
       </div>
 
       {/* Details Sections */}
-      <div className="space-y-6 text-sm">
+      <div className="space-y-4 text-xs">
         {/* Income Section */}
-        <div className="border border-stone-200 rounded-xl overflow-hidden">
-          <div className="bg-emerald-700 text-white px-4 py-2 font-bold flex justify-between">
+        <div className="border border-stone-200 rounded-lg overflow-hidden">
+          <div className="bg-emerald-700 text-white px-3 py-1.5 font-bold flex justify-between text-xs">
             <span>المداخيل</span>
             <span>المبلغ (درهم)</span>
           </div>
-          <div className="p-4 space-y-2">
-            <div className="flex justify-between border-b border-stone-100 pb-2">
+          <div className="p-3 space-y-1">
+            <div className="flex justify-between border-b border-stone-100 pb-1">
               <span>مداخيل ساعات السقي الصافية</span>
               <span className="font-bold">{formatCurrency(netIrrigation)}</span>
             </div>
-            <div className="flex justify-between border-b border-stone-100 pb-2">
+            <div className="flex justify-between border-b border-stone-100 pb-1">
               <span>مداخيل الاشتراكات</span>
               <span className="font-bold">{formatCurrency(totalSubscriptions)}</span>
             </div>
-            <div className="flex justify-between font-black text-emerald-800 pt-2 text-base">
+            <div className="flex justify-between font-black text-emerald-800 pt-1 text-sm">
               <span>مجموع المداخيل:</span>
               <span>{formatCurrency(totalIncome)}</span>
             </div>
@@ -509,28 +509,28 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
         </div>
 
         {/* Expenses Section */}
-        <div className="border border-stone-200 rounded-xl overflow-hidden">
-          <div className="bg-red-700 text-white px-4 py-2 font-bold flex justify-between">
+        <div className="border border-stone-200 rounded-lg overflow-hidden">
+          <div className="bg-red-700 text-white px-3 py-1.5 font-bold flex justify-between text-xs">
             <span>المصاريف</span>
             <span>المبلغ (درهم)</span>
           </div>
-          <div className="p-4 space-y-2">
+          <div className="p-3 space-y-1">
             {totalWorkerWagesConfirmed > 0 && (
-              <div className="flex justify-between border-b border-stone-100 pb-2 bg-red-50/50 px-2 py-1 rounded">
+              <div className="flex justify-between border-b border-stone-100 pb-1 bg-red-50/50 px-1 py-0.5 rounded text-[11px]">
                 <span>أجور عمال السقي المؤداة والمؤكدة</span>
                 <span className="font-bold text-red-700">{formatCurrency(totalWorkerWagesConfirmed)}</span>
               </div>
             )}
             {expensesList.map(e => (
-              <div key={e.id} className="flex justify-between border-b border-stone-100 pb-2 px-2">
+              <div key={e.id} className="flex justify-between border-b border-stone-100 pb-1 px-1 text-[11px]">
                 <span>{e.description} ({formatDate(e.date)})</span>
                 <span className="font-semibold">{formatCurrency(e.amount)}</span>
               </div>
             ))}
             {expensesList.length === 0 && totalWorkerWagesConfirmed === 0 && (
-              <p className="text-stone-400 italic text-center py-2">لا توجد مصاريف خلال هذه الفترة</p>
+              <p className="text-stone-400 italic text-center py-1">لا توجد مصاريف خلال هذه الفترة</p>
             )}
-            <div className="flex justify-between font-black text-red-800 pt-2 text-base border-t border-stone-200">
+            <div className="flex justify-between font-black text-red-800 pt-1 text-sm border-t border-stone-200">
               <span>مجموع المصاريف:</span>
               <span>{formatCurrency(totalExpenses)}</span>
             </div>
@@ -538,27 +538,27 @@ const ReportPrint = React.forwardRef<HTMLDivElement, {
         </div>
 
         {/* Final Result */}
-        <div className="p-4 bg-stone-100 border-2 border-stone-300 rounded-xl flex justify-between items-center text-lg font-black">
-          <span>النتيجة المالية النهائية (الرصيد المتبقي):</span>
+        <div className="p-3 bg-stone-100 border-2 border-stone-300 rounded-lg flex justify-between items-center text-sm font-black">
+          <span>النتيجة المالية النهائية:</span>
           <span className={netBalance >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(netBalance)}</span>
         </div>
       </div>
 
       {/* Signatures & Stamp */}
-      <div className="mt-12 grid grid-cols-2 gap-8 pt-6 border-t-2 border-stone-200 text-center">
+      <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t-2 border-stone-200 text-center text-xs">
         <div>
-          <p className="font-bold text-sm text-stone-800 mb-2">توقيع أمين المال</p>
-          <div className="w-40 h-20 border border-dashed border-stone-300 rounded-lg mx-auto"></div>
+          <p className="font-bold text-stone-800 mb-1">توقيع أمين المال</p>
+          <div className="w-24 h-12 border border-dashed border-stone-300 rounded-lg mx-auto"></div>
         </div>
         <div>
-          <p className="font-bold text-sm text-stone-800 mb-2">خاتم وتوقيع الجمعية</p>
-          <div className="w-24 h-24 rounded-full border border-dashed border-stone-300 mx-auto flex items-center justify-center text-xs text-stone-300">
+          <p className="font-bold text-stone-800 mb-1">خاتم وتوقيع الجمعية</p>
+          <div className="w-16 h-16 rounded-full border border-dashed border-stone-300 mx-auto flex items-center justify-center text-[10px] text-stone-300">
             خاتم الجمعية
           </div>
         </div>
       </div>
 
-      <div className="mt-8 text-center text-xs text-stone-400 border-t border-stone-100 pt-3">
+      <div className="mt-4 text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">
         جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
       </div>
     </div>
