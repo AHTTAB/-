@@ -47,6 +47,17 @@ export interface Expense {
   createdBy?: string;
 }
 
+export interface OtherIncome {
+  id: string;
+  description: string;
+  category: string;
+  amount: number;
+  date: string;
+  payerName: string;
+  receiverUid: string;
+  createdBy?: string;
+}
+
 export interface Transfer {
   id: string;
   fromUid: string;

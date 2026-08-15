@@ -65,7 +65,8 @@ import {
   IrrigationSession, 
   Expense, 
   Transfer, 
-  UserRole 
+  UserRole,
+  OtherIncome 
 } from './types';
 import { 
   SUBSCRIPTION_FEE, 
@@ -75,7 +76,8 @@ import {
   formatCurrency, 
   formatDate,
   loadSettings,
-  saveSettings
+  saveSettings,
+  INCOME_CATEGORIES
 } from './constants';
 import { LOGO_BASE64 } from './logoData';
 
@@ -2879,7 +2881,18 @@ function AssociationBalanceView({ users, sessions, expenses, subscribers }: { us
 }
 
 function FinancialManagementView({ sessions, expenses, subscribers, profile }: { sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[], profile: UserProfile }) {
-  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
+  const [isAddingIncome, setIsAddingIncome] = useState(false);
+  const [otherIncomes, setOtherIncomes] = useState<OtherIncome[]>([]);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'otherIncomes'), (snapshot) => {
+      setOtherIncomes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as OtherIncome)));
+    });
+    return () => unsub();
+  }, []);
+
+  const totalOtherIncome = otherIncomes.reduce((acc, i) => acc + i.amount, 0);
+  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0) + totalOtherIncome;
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
 
   return (
@@ -2889,8 +2902,8 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
                 <h3 className="font-bold text-lg text-emerald-800 mb-4">مجموع المداخيل</h3>
                 <p className="text-3xl font-black mb-4">{formatCurrency(totalIncome)}</p>
                 <button 
-                  onClick={() => alert('هذه الميزة تحت التطوير - قريباً سيتمكن أمين المال من إضافة مداخيل إضافية (تبرعات، إلخ)')}
-                  className="text-xs bg-emerald-50 text-emerald-700 font-bold py-2 px-4 rounded-xl hover:bg-emerald-100 transition-colors"
+                  onClick={() => setIsAddingIncome(true)}
+                  className="text-xs bg-emerald-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-emerald-700 transition-colors"
                 >
                   إضافة مداخيل أخرى
                 </button>
@@ -2900,10 +2913,70 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
                 <p className="text-3xl font-black">{formatCurrency(totalExpenses)}</p>
             </div>
         </div>
+
+        {isAddingIncome && (
+          <AddOtherIncomeModal isOpen={isAddingIncome} onClose={() => setIsAddingIncome(false)} profile={profile} />
+        )}
+        
         <div className="bg-white p-6 rounded-3xl border border-stone-200">
-          <p className="text-stone-500 text-center py-4">لإضافة مداخيل أو مصاريف جديدة، يرجى الانتقال إلى أقسام "حصص السقي" أو "المصاريف" أعلاه.</p>
+           <h3 className="font-bold text-lg text-stone-800 mb-4">قائمة المداخيل الإضافية</h3>
+           <div className="space-y-2">
+             {otherIncomes.map(income => (
+               <div key={income.id} className="flex justify-between items-center p-3 bg-stone-50 rounded-xl border border-stone-100">
+                 <div>
+                   <p className="font-bold text-stone-900">{income.description}</p>
+                   <p className="text-xs text-stone-500">{income.category} - {income.payerName} - {formatDate(income.date)}</p>
+                 </div>
+                 <p className="font-black text-emerald-700">{formatCurrency(income.amount)}</p>
+               </div>
+             ))}
+             {otherIncomes.length === 0 && <p className="text-stone-400 text-center py-4">لا توجد مداخيل إضافية</p>}
+           </div>
         </div>
       </motion.div>
+  );
+}
+
+function AddOtherIncomeModal({ isOpen, onClose, profile }: { isOpen: boolean, onClose: () => void, profile: UserProfile }) {
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState(INCOME_CATEGORIES[0]);
+  const [amount, setAmount] = useState(0);
+  const [payerName, setPayerName] = useState('');
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, 'otherIncomes'), {
+        description,
+        category,
+        amount,
+        date: new Date().toISOString(),
+        payerName,
+        receiverUid: profile.uid,
+        createdBy: profile.uid
+      });
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('خطأ أثناء إضافة الدخل');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8" dir="rtl">
+        <h3 className="text-xl font-bold mb-6">إضافة دخل إضافي</h3>
+        <form onSubmit={handleAdd} className="space-y-4">
+          <input type="text" placeholder="الوصف" required className="w-full p-3 border rounded-xl" onChange={e => setDescription(e.target.value)} />
+          <select className="w-full p-3 border rounded-xl" onChange={e => setCategory(e.target.value)}>
+            {INCOME_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <input type="number" placeholder="المبلغ" required className="w-full p-3 border rounded-xl" onChange={e => setAmount(Number(e.target.value))} />
+          <input type="text" placeholder="اسم الدافع" required className="w-full p-3 border rounded-xl" onChange={e => setPayerName(e.target.value)} />
+          <button className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl">إضافة</button>
+        </form>
+      </motion.div>
+    </div>
   );
 }
 

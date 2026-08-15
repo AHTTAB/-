@@ -120,5 +120,11 @@ service cloud.firestore {
       allow create: if isStaff() && isValidTransfer(request.resource.data);
       allow update, delete: if isAuthenticated();
     }
+
+    match /otherIncomes/{id} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff();
+      allow delete: if isAuthenticated();
+    }
   }
 }

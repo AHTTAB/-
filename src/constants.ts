@@ -56,3 +56,8 @@ export const formatDate = (dateString: string) => {
     minute: '2-digit',
   });
 };
+
+export const INCOME_CATEGORIES = [
+  'تبرعات',
+  'أخرى'
+];
