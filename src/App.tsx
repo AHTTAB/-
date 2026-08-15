@@ -2999,6 +2999,22 @@ function SettingsView({ users, profile, showConfirm }: { users: UserProfile[], p
         >
           {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </button>
+        <button 
+          onClick={async () => {
+            if (confirm('هل أنت متأكد من تصفير رصيدك؟')) {
+                try {
+                    await updateDoc(doc(db, 'users', profile!.uid), { balance: 0 });
+                    alert('تم تصفير الرصيد بنجاح');
+                } catch (err) {
+                    console.error(err);
+                    alert('حدث خطأ أثناء تصفير الرصيد');
+                }
+            }
+          }}
+          className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all"
+        >
+          تصفير رصيدي
+        </button>
       </motion.div>
 
       <SignaturePadModal
