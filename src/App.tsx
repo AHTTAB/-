@@ -2227,6 +2227,7 @@ const ALL_APP_SECTIONS = [
 function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, showConfirm?: (title: string, message: string, onConfirm: () => void) => void, key?: string }) {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
+  const [balance, setBalance] = useState(user.balance || 0);
   const [signatureUrl, setSignatureUrl] = useState(user.signatureUrl || '');
   const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
   const [saving, setSaving] = useState(false);
@@ -2240,9 +2241,10 @@ function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: 
   useEffect(() => {
     setDisplayName(user.displayName || '');
     setRole(user.role || 'mukallaf');
+    setBalance(user.balance || 0);
     setSignatureUrl(user.signatureUrl || '');
     setAllowedTabs(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
-  }, [user.uid, user.displayName, user.role, user.signatureUrl, JSON.stringify(user.allowedTabs)]);
+  }, [user.uid, user.displayName, user.role, user.balance, user.signatureUrl, JSON.stringify(user.allowedTabs)]);
 
   const toggleTab = (tabId: string) => {
     if (!canEditRoleAndTabs) return;
@@ -2268,6 +2270,7 @@ function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: 
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: displayName.trim(),
         role: role,
+        balance: balance,
         signatureUrl: signatureUrl.trim(),
         allowedTabs: role === 'amin' ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] : allowedTabs
       });
@@ -2306,17 +2309,14 @@ function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: 
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-stone-600 mb-1">الصفة / الدور</label>
-            <select 
+            <label className="block text-xs font-bold text-stone-600 mb-1">الرصيد الحالي</label>
+            <input 
+              type="number" 
               disabled={!canEditRoleAndTabs}
-              value={role}
-              onChange={(e) => setRole(e.target.value as UserRole)}
-              className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-bold text-stone-800 w-full disabled:bg-stone-100"
-            >
-              <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
-              <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
-              <option value="mukallaf">مكلف بالتحصيل والسقي</option>
-            </select>
+              value={balance} 
+              onChange={(e) => setBalance(Number(e.target.value))}
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 w-full disabled:bg-stone-100"
+            />
           </div>
           <div>
             <label className="block text-xs font-bold text-stone-600 mb-1">صورة التوقيع (للطباعة في الوصل)</label>
@@ -2887,7 +2887,13 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
         <div className="grid grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-3xl border border-stone-200">
                 <h3 className="font-bold text-lg text-emerald-800 mb-4">مجموع المداخيل</h3>
-                <p className="text-3xl font-black">{formatCurrency(totalIncome)}</p>
+                <p className="text-3xl font-black mb-4">{formatCurrency(totalIncome)}</p>
+                <button 
+                  onClick={() => alert('هذه الميزة تحت التطوير - قريباً سيتمكن أمين المال من إضافة مداخيل إضافية (تبرعات، إلخ)')}
+                  className="text-xs bg-emerald-50 text-emerald-700 font-bold py-2 px-4 rounded-xl hover:bg-emerald-100 transition-colors"
+                >
+                  إضافة مداخيل أخرى
+                </button>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-stone-200">
                 <h3 className="font-bold text-lg text-red-800 mb-4">مجموع المصاريف</h3>
@@ -2998,22 +3004,6 @@ function SettingsView({ users, profile, showConfirm }: { users: UserProfile[], p
           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all"
         >
           {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-        </button>
-        <button 
-          onClick={async () => {
-            if (confirm('هل أنت متأكد من تصفير رصيدك؟')) {
-                try {
-                    await updateDoc(doc(db, 'users', profile!.uid), { balance: 0 });
-                    alert('تم تصفير الرصيد بنجاح');
-                } catch (err) {
-                    console.error(err);
-                    alert('حدث خطأ أثناء تصفير الرصيد');
-                }
-            }
-          }}
-          className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all"
-        >
-          تصفير رصيدي
         </button>
       </motion.div>
 
