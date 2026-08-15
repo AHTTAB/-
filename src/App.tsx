@@ -2932,6 +2932,9 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
             </div>
         </div>
 
+        {isAddingIncome && (
+          <AddOtherIncomeModal isOpen={isAddingIncome} onClose={() => setIsAddingIncome(false)} profile={profile} />
+        )}
         {isEditing && (
           <AddOtherIncomeModal isOpen={!!isEditing} onClose={() => setIsEditing(null)} profile={profile} income={isEditing} />
         )}
