@@ -2882,14 +2882,32 @@ function AssociationBalanceView({ users, sessions, expenses, subscribers }: { us
 
 function FinancialManagementView({ sessions, expenses, subscribers, profile }: { sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[], profile: UserProfile }) {
   const [isAddingIncome, setIsAddingIncome] = useState(false);
+  const [isEditing, setIsEditing] = useState<OtherIncome | null>(null);
   const [otherIncomes, setOtherIncomes] = useState<OtherIncome[]>([]);
 
   useEffect(() => {
+    if (!profile) return;
     const unsub = onSnapshot(collection(db, 'otherIncomes'), (snapshot) => {
       setOtherIncomes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as OtherIncome)));
-    });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'otherIncomes'));
     return () => unsub();
-  }, []);
+  }, [profile.uid]);
+
+  const handleDelete = async (income: OtherIncome) => {
+    if(!confirm('هل أنت متأكد من الحذف؟')) return;
+    try {
+        await deleteDoc(doc(db, 'otherIncomes', income.id));
+        const userRef = doc(db, 'users', income.receiverUid);
+        const userDoc = await getDoc(userRef);
+        if(userDoc.exists()) {
+             const userData = userDoc.data() as UserProfile;
+             await updateDoc(userRef, { balance: userData.balance - income.amount });
+        }
+    } catch(err) {
+        console.error(err);
+        alert('خطأ أثناء الحذف');
+    }
+  }
 
   const totalOtherIncome = otherIncomes.reduce((acc, i) => acc + i.amount, 0);
   const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0) + totalOtherIncome;
@@ -2914,8 +2932,8 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
             </div>
         </div>
 
-        {isAddingIncome && (
-          <AddOtherIncomeModal isOpen={isAddingIncome} onClose={() => setIsAddingIncome(false)} profile={profile} />
+        {isEditing && (
+          <AddOtherIncomeModal isOpen={!!isEditing} onClose={() => setIsEditing(null)} profile={profile} income={isEditing} />
         )}
         
         <div className="bg-white p-6 rounded-3xl border border-stone-200">
@@ -2927,7 +2945,11 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
                    <p className="font-bold text-stone-900">{income.description}</p>
                    <p className="text-xs text-stone-500">{income.category} - {income.payerName} - {formatDate(income.date)}</p>
                  </div>
-                 <p className="font-black text-emerald-700">{formatCurrency(income.amount)}</p>
+                 <div className="flex items-center gap-2">
+                    <p className="font-black text-emerald-700">{formatCurrency(income.amount)}</p>
+                    <button onClick={() => setIsEditing(income)} className="p-1 hover:bg-stone-200 rounded"><PenTool className="w-4 h-4 text-stone-600"/></button>
+                    <button onClick={() => handleDelete(income)} className="p-1 hover:bg-red-100 rounded text-red-600"><Trash2 className="w-4 h-4"/></button>
+                 </div>
                </div>
              ))}
              {otherIncomes.length === 0 && <p className="text-stone-400 text-center py-4">لا توجد مداخيل إضافية</p>}
@@ -2937,43 +2959,67 @@ function FinancialManagementView({ sessions, expenses, subscribers, profile }: {
   );
 }
 
-function AddOtherIncomeModal({ isOpen, onClose, profile }: { isOpen: boolean, onClose: () => void, profile: UserProfile }) {
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState(INCOME_CATEGORIES[0]);
-  const [amount, setAmount] = useState(0);
-  const [payerName, setPayerName] = useState('');
+function AddOtherIncomeModal({ isOpen, onClose, profile, income }: { isOpen: boolean, onClose: () => void, profile: UserProfile, income?: OtherIncome }) {
+  const [description, setDescription] = useState(income?.description || '');
+  const [categories, setCategories] = useState(INCOME_CATEGORIES);
+  const [category, setCategory] = useState(income?.category || INCOME_CATEGORIES[0]);
+  const [amount, setAmount] = useState(income?.amount || 0);
+  const [payerName, setPayerName] = useState(income?.payerName || '');
+  const [isAddingCat, setIsAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState('');
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'otherIncomes'), {
-        description,
-        category,
-        amount,
-        date: new Date().toISOString(),
-        payerName,
-        receiverUid: profile.uid,
-        createdBy: profile.uid
-      });
+      if (income) {
+          // Update
+          const oldAmount = income.amount;
+          await updateDoc(doc(db, 'otherIncomes', income.id), {
+            description, category, amount, payerName
+          });
+          const userRef = doc(db, 'users', profile.uid);
+          await updateDoc(userRef, { balance: profile.balance - oldAmount + amount });
+      } else {
+          // Create
+          await addDoc(collection(db, 'otherIncomes'), {
+            description, category, amount, date: new Date().toISOString(), payerName,
+            receiverUid: profile.uid, createdBy: profile.uid
+          });
+          await updateDoc(doc(db, 'users', profile.uid), { balance: profile.balance + amount });
+      }
       onClose();
     } catch (err) {
       console.error(err);
-      alert('خطأ أثناء إضافة الدخل');
+      alert('خطأ أثناء الحفظ');
     }
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8" dir="rtl">
-        <h3 className="text-xl font-bold mb-6">إضافة دخل إضافي</h3>
-        <form onSubmit={handleAdd} className="space-y-4">
-          <input type="text" placeholder="الوصف" required className="w-full p-3 border rounded-xl" onChange={e => setDescription(e.target.value)} />
-          <select className="w-full p-3 border rounded-xl" onChange={e => setCategory(e.target.value)}>
-            {INCOME_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <input type="number" placeholder="المبلغ" required className="w-full p-3 border rounded-xl" onChange={e => setAmount(Number(e.target.value))} />
-          <input type="text" placeholder="اسم الدافع" required className="w-full p-3 border rounded-xl" onChange={e => setPayerName(e.target.value)} />
-          <button className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl">إضافة</button>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold">{income ? 'تعديل الدخل' : 'إضافة دخل إضافي'}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full text-stone-500">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="space-y-4">
+          <input type="text" placeholder="الوصف" required className="w-full p-3 border rounded-xl" value={description} onChange={e => setDescription(e.target.value)} />
+          <div className="flex gap-2">
+            <select className="flex-1 p-3 border rounded-xl" value={category} onChange={e => setCategory(e.target.value)}>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button type="button" onClick={() => setIsAddingCat(!isAddingCat)} className="px-4 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 hover:bg-stone-200">+</button>
+          </div>
+          {isAddingCat && (
+            <div className="flex gap-2">
+              <input type="text" placeholder="تصنيف جديد" className="flex-1 p-3 border rounded-xl" onChange={e => setNewCat(e.target.value)} />
+              <button type="button" onClick={() => { if(newCat) { setCategories([...categories, newCat]); setCategory(newCat); setIsAddingCat(false); setNewCat(''); }}} className="px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold">حفظ</button>
+            </div>
+          )}
+          <input type="number" placeholder="المبلغ" required className="w-full p-3 border rounded-xl" value={amount} onChange={e => setAmount(Number(e.target.value))} />
+          <input type="text" placeholder="اسم الدافع" required className="w-full p-3 border rounded-xl" value={payerName} onChange={e => setPayerName(e.target.value)} />
+          <button className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl">{income ? 'حفظ التعديلات' : 'إضافة'}</button>
         </form>
       </motion.div>
     </div>
