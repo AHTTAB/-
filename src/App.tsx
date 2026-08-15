@@ -942,6 +942,22 @@ export default function App() {
                 label="سجل العمليات"
               />
             )}
+            {isTabAllowed('balance') && (
+              <SidebarItem 
+                active={activeTab === 'balance'} 
+                onClick={() => {setActiveTab('balance'); setIsSidebarOpen(false);}}
+                icon={<Wallet className="w-5 h-5" />}
+                label="الرصيد"
+              />
+            )}
+            {isTabAllowed('financial') && (
+              <SidebarItem 
+                active={activeTab === 'financial'} 
+                onClick={() => {setActiveTab('financial'); setIsSidebarOpen(false);}}
+                icon={<BarChart3 className="w-5 h-5" />}
+                label="التدبير المالي"
+              />
+            )}
             {profile.role === 'amin' && (
               <SidebarItem 
                 active={activeTab === 'settings'} 
@@ -1021,13 +1037,15 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto p-6">
           <AnimatePresence mode="wait">
-            {isTabAllowed('dashboard') && activeTab === 'dashboard' && <div key="dashboard"><DashboardView subscribers={subscribers} sessions={sessions} expenses={expenses} profile={profile} /></div>}
+            {isTabAllowed('dashboard') && activeTab === 'dashboard' && <div key="dashboard"><DashboardView subscribers={subscribers} sessions={sessions} expenses={expenses} profile={profile} users={users} /></div>}
             {isTabAllowed('subscribers') && activeTab === 'subscribers' && <div key="subscribers"><SubscribersView subscribers={subscribers} profile={profile} /></div>}
             {isTabAllowed('irrigation') && activeTab === 'irrigation' && <div key="irrigation"><IrrigationView subscribers={subscribers} sessions={sessions} profile={profile} showConfirm={showConfirm} users={users} /></div>}
             {isTabAllowed('expenses') && activeTab === 'expenses' && <div key="expenses"><ExpensesView expenses={expenses} profile={profile} users={users} /></div>}
             {isTabAllowed('reports') && activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
             {isTabAllowed('transfers') && activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
             {isTabAllowed('activity') && activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
+            {isTabAllowed('balance') && activeTab === 'balance' && <div key="balance"><AssociationBalanceView users={users} sessions={sessions} expenses={expenses} subscribers={subscribers} /></div>}
+            {isTabAllowed('financial') && activeTab === 'financial' && <div key="financial"><FinancialManagementView sessions={sessions} expenses={expenses} subscribers={subscribers} profile={profile} /></div>}
             {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} profile={profile} showConfirm={showConfirm} /></div>}
           </AnimatePresence>
 
@@ -1062,11 +1080,12 @@ function SidebarItem({ active, onClick, icon, label }: { active: boolean, onClic
   );
 }
 
-function DashboardView({ subscribers, sessions, expenses, profile }: { subscribers: Subscriber[], sessions: IrrigationSession[], expenses: Expense[], profile: UserProfile }) {
+function DashboardView({ subscribers, sessions, expenses, profile, users }: { subscribers: Subscriber[], sessions: IrrigationSession[], expenses: Expense[], profile: UserProfile, users: UserProfile[] }) {
   const totalSubscribers = subscribers.length;
   const totalHours = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.hours, 0);
   const totalRevenue = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + (subscribers.length * SUBSCRIPTION_FEE);
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const associationBalance = users.reduce((acc, u) => acc + (u.balance || 0), 0);
 
   return (
     <motion.div 
@@ -1080,6 +1099,7 @@ function DashboardView({ subscribers, sessions, expenses, profile }: { subscribe
         <StatCard icon={<Droplets className="text-emerald-600" />} label="إجمالي ساعات السقي" value={`${totalHours} ساعة`} color="bg-emerald-50" />
         <StatCard icon={<Wallet className="text-amber-600" />} label="إجمالي المداخيل" value={formatCurrency(totalRevenue)} color="bg-amber-50" />
         <StatCard icon={<XCircle className="text-red-600" />} label="إجمالي المصاريف" value={formatCurrency(totalExpenses)} color="bg-red-50" />
+        <StatCard icon={<Wallet className="text-emerald-600" />} label="رصيد الجمعية" value={formatCurrency(associationBalance)} color="bg-emerald-100" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1388,9 +1408,22 @@ function SubscribersView({ subscribers, profile, users }: { subscribers: Subscri
                         <Printer className="w-5 h-5" />
                       </button>
                       <button 
-                        onClick={() => {
-                          if (confirm('هل أنت متأكد من حذف هذا المشترك؟')) {
-                            deleteDoc(doc(db, 'subscribers', sub.id));
+                        onClick={async () => {
+                          if (confirm('هل أنت متأكد من حذف هذا المشترك؟ سيتم خصم رسوم الاشتراك من رصيد المسجل.')) {
+                            try {
+                              await deleteDoc(doc(db, 'subscribers', sub.id));
+                              if (sub.createdBy) {
+                                const userRef = doc(db, 'users', sub.createdBy);
+                                const userDoc = await getDoc(userRef);
+                                if (userDoc.exists()) {
+                                  await updateDoc(userRef, {
+                                    balance: (userDoc.data().balance || 0) - sub.subscriptionFeePaid
+                                  });
+                                }
+                              }
+                            } catch (err) {
+                              handleFirestoreError(err, OperationType.DELETE, 'subscribers');
+                            }
                           }
                         }}
                         className="p-2 text-stone-400 hover:text-red-600 transition-colors"
@@ -1726,9 +1759,20 @@ function IrrigationView({ subscribers, sessions, profile, showConfirm, users }: 
                       </button>
                     )}
                     <button 
-                      onClick={() => {
-                        if (confirm('هل أنت متأكد من حذف هذه العملية؟')) {
-                          deleteDoc(doc(db, 'sessions', session.id));
+                      onClick={async () => {
+                        if (confirm('هل أنت متأكد من حذف هذه العملية؟ سيتم خصم المبلغ من رصيد المكلف.')) {
+                          try {
+                            await deleteDoc(doc(db, 'sessions', session.id));
+                            const collectorRef = doc(db, 'users', session.collectedBy);
+                            const collectorDoc = await getDoc(collectorRef);
+                            if (collectorDoc.exists()) {
+                               await updateDoc(collectorRef, {
+                                 balance: (collectorDoc.data().balance || 0) - session.totalAmount
+                               });
+                            }
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.DELETE, 'sessions');
+                          }
                         }
                       }}
                       className="p-2 text-stone-400 hover:text-red-600 transition-colors"
@@ -1892,9 +1936,20 @@ function ExpensesView({ expenses, profile, users }: { expenses: Expense[], profi
                     <td className="px-6 py-4 font-bold text-red-600">{formatCurrency(expense.amount)}</td>
                     <td className="px-6 py-4">
                       <button 
-                        onClick={() => {
-                          if (confirm('هل أنت متأكد من حذف هذه المصاريف؟')) {
-                            deleteDoc(doc(db, 'expenses', expense.id));
+                        onClick={async () => {
+                          if (confirm('هل أنت متأكد من حذف هذه المصاريف؟ سيتم إضافة المبلغ لرصيد المستخدم.')) {
+                            try {
+                              await deleteDoc(doc(db, 'expenses', expense.id));
+                              const userRef = doc(db, 'users', expense.addedBy);
+                              const userDoc = await getDoc(userRef);
+                              if (userDoc.exists()) {
+                                 await updateDoc(userRef, {
+                                   balance: (userDoc.data().balance || 0) + expense.amount
+                                 });
+                              }
+                            } catch (err) {
+                              handleFirestoreError(err, OperationType.DELETE, 'expenses');
+                            }
                           }
                         }}
                         className="p-2 text-stone-400 hover:text-red-600 transition-colors"
@@ -2165,6 +2220,8 @@ const ALL_APP_SECTIONS = [
   { id: 'reports', name: 'التقارير المالية', description: 'متابعة المداخيل والحسابات' },
   { id: 'transfers', name: 'تحويل الرصيد', description: 'إرسال وتحويل المبالغ بين الأعضاء' },
   { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
+  { id: 'balance', name: 'الرصيد', description: 'رصيد الجمعية المالي' },
+  { id: 'financial', name: 'التدبير المالي', description: 'مجموع المداخيل والمصاريف' },
 ];
 
 function UserRowItem({ user, currentUser, isAmin = true, showConfirm }: { user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, showConfirm?: (title: string, message: string, onConfirm: () => void) => void, key?: string }) {
@@ -2792,6 +2849,55 @@ function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: 
         {activities.length === 0 && <p className="text-center text-stone-400 py-12">لا توجد عمليات مسجلة</p>}
       </div>
     </motion.div>
+  );
+}
+
+function AssociationBalanceView({ users, sessions, expenses, subscribers }: { users: UserProfile[], sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[] }) {
+  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
+  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const totalBalance = totalIncome - totalExpenses;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-white rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <h2 className="text-2xl font-bold text-stone-900">رصيد الجمعية</h2>
+      <div className="bg-emerald-600 text-white p-8 rounded-3xl shadow-lg">
+        <p className="text-emerald-100 font-bold mb-2">الرصيد الكلي للجمعية</p>
+        <p className="text-5xl font-black">{formatCurrency(totalBalance)}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-emerald-50 p-6 rounded-3xl">
+           <p className="text-emerald-800 font-bold">إجمالي المداخيل</p>
+           <p className="text-3xl font-black text-emerald-900">{formatCurrency(totalIncome)}</p>
+        </div>
+        <div className="bg-red-50 p-6 rounded-3xl">
+           <p className="text-red-800 font-bold">إجمالي المصاريف</p>
+           <p className="text-3xl font-black text-red-900">{formatCurrency(totalExpenses)}</p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function FinancialManagementView({ sessions, expenses, subscribers, profile }: { sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[], profile: UserProfile }) {
+  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
+  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+
+  return (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-3xl border border-stone-200">
+                <h3 className="font-bold text-lg text-emerald-800 mb-4">مجموع المداخيل</h3>
+                <p className="text-3xl font-black">{formatCurrency(totalIncome)}</p>
+            </div>
+            <div className="bg-white p-6 rounded-3xl border border-stone-200">
+                <h3 className="font-bold text-lg text-red-800 mb-4">مجموع المصاريف</h3>
+                <p className="text-3xl font-black">{formatCurrency(totalExpenses)}</p>
+            </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-stone-200">
+          <p className="text-stone-500 text-center py-4">لإضافة مداخيل أو مصاريف جديدة، يرجى الانتقال إلى أقسام "حصص السقي" أو "المصاريف" أعلاه.</p>
+        </div>
+      </motion.div>
   );
 }
 
