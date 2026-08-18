@@ -17,8 +17,7 @@ export interface Subscriber {
   nationalId?: string;
   subscriptionDate: string;
   subscriptionFeePaid: number;
-  balance?: number;
-  status?: 'active' | 'inactive';
+  balance: number;
   receiptNumber?: string;
   createdBy?: string;
 }

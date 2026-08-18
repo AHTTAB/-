@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
   User as FirebaseUser,
-  signInWithEmailAndPassword
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
 } from 'firebase/auth';
 import { 
   collection, 
@@ -14,9 +14,13 @@ import {
   onSnapshot, 
   query, 
   setDoc, 
+  where, 
   orderBy, 
   addDoc, 
   updateDoc, 
+  getDocFromServer, 
+  Timestamp,
+  serverTimestamp,
   deleteDoc
 } from 'firebase/firestore';
 import { 
@@ -48,17 +52,13 @@ import {
   Lock,
   Shield,
   Upload,
-  PenTool,
-  QrCode,
-  Smartphone,
-  CheckCircle2,
-  Calendar,
-  Layers,
-  ChevronDown
+  PenTool
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useEffect, useState, useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import { ReceiptPrint } from './components/ReceiptPrint';
 import { auth, db, createNewUserAccount } from './firebase';
 import { 
   UserProfile, 
@@ -81,16 +81,61 @@ import {
   INCOME_CATEGORIES
 } from './constants';
 import { LOGO_BASE64 } from './logoData';
-import { ReceiptPrint, SafePrintImage } from './components/ReceiptPrint';
-import { ReportPrint } from './components/ReportPrint';
-import { 
-  printViaRawBT, 
-  formatIrrigationRawBT, 
-  formatSubscriptionRawBT, 
-  formatReportRawBT 
-} from './utils/rawbtPrinter';
 
-// Signature Pad Modal
+function SafePrintImage({ 
+  src, 
+  alt, 
+  className, 
+  fallbackText 
+}: { 
+  src?: string, 
+  alt: string, 
+  className?: string, 
+  fallbackText?: string 
+}) {
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!src || !src.trim()) {
+      setLoadedSrc(null);
+      return;
+    }
+
+    const cleanSrc = src.trim();
+    if (cleanSrc.startsWith('data:image/')) {
+      setLoadedSrc(cleanSrc);
+      return;
+    }
+
+    let isMounted = true;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = cleanSrc;
+    img.onload = () => {
+      if (isMounted) setLoadedSrc(cleanSrc);
+    };
+    img.onerror = () => {
+      if (isMounted) setLoadedSrc(null);
+    };
+
+    return () => {
+      isMounted = false;
+    };
+  }, [src]);
+
+  if (!loadedSrc) {
+    return <span className="text-[10px] text-stone-400 font-medium text-center block select-none px-1 py-0.5">{fallbackText || alt}</span>;
+  }
+
+  return (
+    <img 
+      src={loadedSrc} 
+      alt={alt} 
+      className={className} 
+    />
+  );
+}
+
 function SignaturePadModal({
   isOpen,
   onClose,
@@ -113,7 +158,7 @@ function SignaturePadModal({
       if (ctx) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#006699';
+        ctx.strokeStyle = '#065f46';
         ctx.lineWidth = 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -165,7 +210,7 @@ function SignaturePadModal({
     if (ctx) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#006699';
+      ctx.strokeStyle = '#065f46';
       ctx.lineWidth = 3;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -182,18 +227,18 @@ function SignaturePadModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-sky-100 space-y-4 text-right" dir="rtl">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full text-slate-500">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-stone-200 space-y-4 text-right" dir="rtl">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+          <h3 className="text-lg font-bold text-stone-900">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded-full text-stone-500">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-500">ارسم توقيعك بيدك أو باللمس في المربع أسفله:</p>
+        <p className="text-xs text-stone-500">ارسم توقيعك بيدك أو باللمس في المربع أسفله:</p>
 
-        <div className="border-2 border-dashed border-sky-400 rounded-2xl p-2 bg-sky-50/50 touch-none flex justify-center">
+        <div className="border-2 border-dashed border-emerald-300 rounded-2xl p-2 bg-stone-50 touch-none flex justify-center">
           <canvas
             ref={canvasRef}
             width={340}
@@ -205,7 +250,7 @@ function SignaturePadModal({
             onTouchStart={startDrawing}
             onTouchMove={draw}
             onTouchEnd={stopDrawing}
-            className="bg-white rounded-xl shadow-xs cursor-crosshair border border-slate-200"
+            className="bg-white rounded-xl shadow-xs cursor-crosshair border border-stone-200"
           />
         </div>
 
@@ -213,7 +258,7 @@ function SignaturePadModal({
           <button
             type="button"
             onClick={handleClear}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+            className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors"
           >
             مسح
           </button>
@@ -221,7 +266,7 @@ function SignaturePadModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-colors"
+              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-bold rounded-xl transition-colors"
             >
               إلغاء
             </button>
@@ -229,7 +274,7 @@ function SignaturePadModal({
               type="button"
               disabled={!hasDrawn}
               onClick={handleConfirm}
-              className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b6] text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-colors shadow-sm"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-colors shadow-xs"
             >
               اعتماد التوقيع
             </button>
@@ -240,7 +285,7 @@ function SignaturePadModal({
   );
 }
 
-// Error Handling Enum
+// --- Error Handling ---
 enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -250,51 +295,264 @@ enum OperationType {
   WRITE = 'write',
 }
 
-function handleFirestoreError(error: any, op: OperationType, path: string) {
-  console.error(`Firestore error during ${op} on ${path}:`, error);
-}
-
-// CSV Export Helper
-function downloadCSV(data: any[], columns: { header: string, accessor: (row: any) => any }[], filename: string) {
-  const csvRows = [];
-  csvRows.push(columns.map(c => `"${c.header}"`).join(','));
-  for (const row of data) {
-    const values = columns.map(c => {
-      const val = c.accessor(row);
-      return `"${(val !== undefined && val !== null ? String(val) : '').replace(/"/g, '""')}"`;
-    });
-    csvRows.push(values.join(','));
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
   }
-  const csvString = '\uFEFF' + csvRows.join('\n');
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.setAttribute('href', url);
-  a.setAttribute('download', `${filename}-${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
 }
 
-const ALL_APP_SECTIONS = [
-  { id: 'dashboard', name: 'لوحة التحكم', description: 'الإحصائيات العامة والرصيد' },
-  { id: 'subscribers', name: 'إدارة المشتركين', description: 'إضافة وتعديل بيانات المشتركين' },
-  { id: 'irrigation', name: 'حصص السقي', description: 'استيفاء حصص السقي وطباعة الوصل' },
-  { id: 'expenses', name: 'المصاريف', description: 'تسجيل مصاريف وتكاليف الجمعية' },
-  { id: 'reports', name: 'التقارير المالية', description: 'متابعة المداخيل والحسابات' },
-  { id: 'transfers', name: 'تحويل الرصيد', description: 'إرسال وتحويل المبالغ بين الأعضاء' },
-  { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
-  { id: 'balance', name: 'رصيد الجمعية', description: 'رصيد الجمعية المالي الشامل' },
-  { id: 'financial', name: 'التدبير المالي', description: 'مجموع المداخيل والمصاريف الإضافية' },
-];
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email || undefined,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+// --- Components ---
+
+const ReportPrint = React.forwardRef<HTMLDivElement, { 
+  startDate: string, 
+  endDate: string, 
+  netIrrigation: number, 
+  totalSubscriptions: number, 
+  totalIncome: number, 
+  totalWorkerWagesConfirmed: number,
+  expensesList: Expense[], 
+  totalExpenses: number, 
+  netBalance: number 
+}>(({ startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalWorkerWagesConfirmed, expensesList, totalExpenses, netBalance }, ref) => {
+  return (
+    <div ref={ref} className="p-4 bg-white text-black font-sans w-full max-w-4xl mx-auto border border-stone-200 print:w-full print:max-w-none print:p-2" dir="rtl">
+      {/* Report Header */}
+      <div className="flex items-center justify-between border-b-2 border-emerald-600 pb-4 mb-4">
+        <div className="flex items-center gap-3">
+          <img 
+            src={LOGO_BASE64} 
+            alt="لوجو الجمعية" 
+            className="w-16 h-16 object-contain rounded-full border border-emerald-500 shadow-xs" 
+          />
+          <div>
+            <h1 className="text-lg font-black text-stone-900">جمعية تيفاوت للتنمية والتعاون</h1>
+            <p className="text-xs font-bold text-emerald-800">دوار العامرية - مياه السقي</p>
+            <p className="text-[10px] text-stone-500 mt-0.5">تقرير مالي وتفصيلي للمداخيل والمصاريف</p>
+          </div>
+        </div>
+        <div className="text-left bg-stone-50 p-2 rounded-lg border border-stone-200 text-[10px] text-stone-700 space-y-0.5">
+          <p className="font-bold text-xs text-emerald-800">التقرير المالي</p>
+          <p><span className="font-bold">تاريخ الاستخراج:</span> {new Date().toLocaleDateString('ar-MA')}</p>
+          <p><span className="font-bold">الفترة:</span> {startDate ? formatDate(startDate) : 'البداية'} إلى {endDate ? formatDate(endDate) : 'الحالي'}</p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-4 gap-2 mb-4 text-center">
+        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <p className="text-[10px] font-bold text-emerald-800">مداخيل السقي</p>
+          <p className="text-sm font-black text-emerald-900">{formatCurrency(netIrrigation)}</p>
+        </div>
+        <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-[10px] font-bold text-blue-800">أجور العمال</p>
+          <p className="text-sm font-black text-blue-900">{formatCurrency(totalWorkerWagesConfirmed)}</p>
+        </div>
+        <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-[10px] font-bold text-red-800">إجمالي المصاريف</p>
+          <p className="text-sm font-black text-red-900">{formatCurrency(totalExpenses)}</p>
+        </div>
+        <div className="p-2 bg-stone-100 border border-stone-300 rounded-lg">
+          <p className="text-[10px] font-bold text-stone-800">الرصيد المتبقي</p>
+          <p className={`text-sm font-black ${netBalance >= 0 ? 'text-emerald-800' : 'text-red-800'}`}>{formatCurrency(netBalance)}</p>
+        </div>
+      </div>
+
+      {/* Details Sections */}
+      <div className="space-y-4 text-xs">
+        {/* Income Section */}
+        <div className="border border-stone-200 rounded-lg overflow-hidden">
+          <div className="bg-emerald-700 text-white px-3 py-1.5 font-bold flex justify-between text-xs">
+            <span>المداخيل</span>
+            <span>المبلغ (درهم)</span>
+          </div>
+          <div className="p-3 space-y-1">
+            <div className="flex justify-between border-b border-stone-100 pb-1">
+              <span>مداخيل ساعات السقي الصافية</span>
+              <span className="font-bold">{formatCurrency(netIrrigation)}</span>
+            </div>
+            <div className="flex justify-between border-b border-stone-100 pb-1">
+              <span>مداخيل الاشتراكات</span>
+              <span className="font-bold">{formatCurrency(totalSubscriptions)}</span>
+            </div>
+            <div className="flex justify-between font-black text-emerald-800 pt-1 text-sm">
+              <span>مجموع المداخيل:</span>
+              <span>{formatCurrency(totalIncome)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Expenses Section */}
+        <div className="border border-stone-200 rounded-lg overflow-hidden">
+          <div className="bg-red-700 text-white px-3 py-1.5 font-bold flex justify-between text-xs">
+            <span>المصاريف</span>
+            <span>المبلغ (درهم)</span>
+          </div>
+          <div className="p-3 space-y-1">
+            {totalWorkerWagesConfirmed > 0 && (
+              <div className="flex justify-between border-b border-stone-100 pb-1 bg-red-50/50 px-1 py-0.5 rounded text-[11px]">
+                <span>أجور عمال السقي المؤداة والمؤكدة</span>
+                <span className="font-bold text-red-700">{formatCurrency(totalWorkerWagesConfirmed)}</span>
+              </div>
+            )}
+            {expensesList.map(e => (
+              <div key={e.id} className="flex justify-between border-b border-stone-100 pb-1 px-1 text-[11px]">
+                <span>{e.description} ({formatDate(e.date)})</span>
+                <span className="font-semibold">{formatCurrency(e.amount)}</span>
+              </div>
+            ))}
+            {expensesList.length === 0 && totalWorkerWagesConfirmed === 0 && (
+              <p className="text-stone-400 italic text-center py-1">لا توجد مصاريف خلال هذه الفترة</p>
+            )}
+            <div className="flex justify-between font-black text-red-800 pt-1 text-sm border-t border-stone-200">
+              <span>مجموع المصاريف:</span>
+              <span>{formatCurrency(totalExpenses)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Final Result */}
+        <div className="p-3 bg-stone-100 border-2 border-stone-300 rounded-lg flex justify-between items-center text-sm font-black">
+          <span>النتيجة المالية النهائية:</span>
+          <span className={netBalance >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(netBalance)}</span>
+        </div>
+      </div>
+
+      {/* Signatures & Stamp */}
+      <div className="mt-6 grid grid-cols-2 gap-4 pt-4 border-t-2 border-stone-200 text-center text-xs">
+        <div>
+          <p className="font-bold text-stone-800 mb-1">توقيع أمين المال</p>
+          <div className="w-24 h-12 border border-dashed border-stone-300 rounded-lg mx-auto"></div>
+        </div>
+        <div>
+          <p className="font-bold text-stone-800 mb-1">خاتم وتوقيع الجمعية</p>
+          <div className="w-16 h-16 rounded-full border border-dashed border-stone-300 mx-auto flex items-center justify-center text-[10px] text-stone-300">
+            خاتم الجمعية
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-center text-[10px] text-stone-400 border-t border-stone-100 pt-2">
+        جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}
+      </div>
+    </div>
+  );
+});
+
+ReportPrint.displayName = 'ReportPrint';
+
+const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }: { isOpen: boolean, onClose: () => void, onConfirm: () => void, title: string, message: string }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center"
+      >
+        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <AlertCircle className="w-8 h-8 text-amber-600" />
+        </div>
+        <h3 className="text-xl font-bold text-stone-900 mb-2">{title}</h3>
+        <p className="text-stone-500 mb-8">{message}</p>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => { onConfirm(); onClose(); }}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all"
+          >
+            تأكيد
+          </button>
+          <button 
+            onClick={onClose}
+            className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
+          >
+            إلغاء
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// --- Utils ---
+const downloadCSV = (data: any[], columns: { header: string, accessor: (row: any) => any }[], fileName: string) => {
+  const csvRows = [];
+  csvRows.push(columns.map(c => c.header).join(','));
+  for (const row of data) {
+    csvRows.push(columns.map(c => {
+      const val = c.accessor(row);
+      return `"${String(val).replace(/"/g, '""')}"`;
+    }).join(','));
+  }
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${fileName}.csv`;
+  link.click();
+};
+
+// --- Main App ---
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Email Auth State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  
+  // Modal State
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ isOpen: true, title, message, onConfirm });
+  };
+  
   // Data States
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [sessions, setSessions] = useState<IrrigationSession[]>([]);
@@ -302,69 +560,42 @@ export default function App() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
-  // Dialog & Modal Confirm
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-  });
 
-  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
-    setConfirmModal({
-      isOpen: true,
-      title,
-      message,
-      onConfirm: () => {
-        onConfirm();
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-      }
-    });
-  };
-
+  // Auth & Profile
   useEffect(() => {
     loadSettings();
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          if (!userDoc.exists()) {
-            const isDefaultAmin = currentUser.email?.toLowerCase() === 'amriahassan@gmail.com';
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          setProfile(userDoc.data() as UserProfile);
+        } else {
+          // If primary owner email, auto-create admin profile
+          if (firebaseUser.email?.toLowerCase() === 'amriahassan@gmail.com') {
             const newProfile: UserProfile = {
-              uid: currentUser.uid,
-              displayName: currentUser.displayName || 'مستخدم جديد',
-              email: currentUser.email || '',
-              role: isDefaultAmin ? 'amin' : 'mukallaf',
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              role: 'amin',
+              displayName: firebaseUser.displayName || 'أمين المال (المسؤول)',
               balance: 0,
-              allowedTabs: ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity', 'balance', 'financial']
+              allowedTabs: ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']
             };
-            await setDoc(userDocRef, newProfile);
+            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
             setProfile(newProfile);
           } else {
-            const data = userDoc.data() as UserProfile;
-            if (currentUser.email?.toLowerCase() === 'amriahassan@gmail.com' && data.role !== 'amin') {
-              data.role = 'amin';
-              await updateDoc(userDocRef, { role: 'amin' });
-            }
-            setProfile(data);
+            // Account was deleted by admin or not authorized
+            await signOut(auth);
+            setUser(null);
+            setProfile(null);
+            setAuthError('عذراً، هذا الحساب غير مصرح له أو تم إلغاؤه من طرف الإدارة.');
           }
-        } catch (e) {
-          console.error("Error setting user profile:", e);
         }
       } else {
         setProfile(null);
       }
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -389,7 +620,24 @@ export default function App() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'transfers'));
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setUsers(snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
+      const updatedUsers = snapshot.docs.map(doc => ({ ...doc.data() } as UserProfile));
+      setUsers(updatedUsers);
+      const myProfile = updatedUsers.find(u => u.uid === user.uid);
+      if (myProfile) {
+        setProfile(prev => {
+          if (!prev) return myProfile;
+          if (
+            prev.uid === myProfile.uid &&
+            prev.displayName === myProfile.displayName &&
+            prev.role === myProfile.role &&
+            prev.balance === myProfile.balance &&
+            JSON.stringify(prev.allowedTabs) === JSON.stringify(myProfile.allowedTabs)
+          ) {
+            return prev;
+          }
+          return myProfile;
+        });
+      }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
 
     return () => {
@@ -399,868 +647,698 @@ export default function App() {
       unsubTransfers();
       unsubUsers();
     };
-  }, [user]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#cbe8f8] via-[#e2f3fc] to-[#d6effa] flex items-center justify-center font-sans" dir="rtl">
-        <div className="bg-white/80 backdrop-blur-md p-8 rounded-3xl shadow-xl border border-sky-200 text-center space-y-4 max-w-sm">
-          <div className="w-14 h-14 border-4 border-sky-200 border-t-[#0088cc] rounded-full animate-spin mx-auto"></div>
-          <p className="text-slate-800 font-bold text-base">جاري تحميل منظومة مياه السقي...</p>
-          <p className="text-xs text-slate-500">جمعية تيفاوت للتنمية والتعاون</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user || !profile) {
-    return <AuthScreen onLoginSuccess={() => setLoading(false)} />;
-  }
+  }, [user?.uid]);
 
   const isTabAllowed = (tabId: string) => {
+    if (!profile) return false;
     if (profile.role === 'amin') return true;
     if (tabId === 'settings') return false;
     if (!profile.allowedTabs || profile.allowedTabs.length === 0) return true;
     return profile.allowedTabs.includes(tabId);
   };
 
-  const navItems = [
-    { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
-    { id: 'subscribers', label: 'المشتركون', icon: Users },
-    { id: 'irrigation', label: 'حصص السقي', icon: Droplets },
-    { id: 'expenses', label: 'المصاريف', icon: Receipt },
-    { id: 'reports', label: 'التقارير', icon: BarChart3 },
-    { id: 'transfers', label: 'التحويلات', icon: ArrowRightLeft },
-    { id: 'activity', label: 'سجل العمليات', icon: History },
-    { id: 'balance', label: 'رصيد الجمعية', icon: Wallet },
-    { id: 'financial', label: 'التدبير المالي', icon: CreditCard },
-  ].filter(item => isTabAllowed(item.id));
+  useEffect(() => {
+    if (profile && !isTabAllowed(activeTab)) {
+      const allTabs = ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'];
+      const firstAllowed = allTabs.find(t => isTabAllowed(t)) || 'dashboard';
+      if (firstAllowed !== activeTab) {
+        setActiveTab(firstAllowed);
+      }
+    }
+  }, [profile?.role, JSON.stringify(profile?.allowedTabs), activeTab]);
 
-  if (profile.role === 'amin') {
-    navItems.push({ id: 'settings', label: 'الإعدادات والمستخدمين', icon: Settings });
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      console.error('Auth error:', error);
+      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setAuthError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      } else {
+        setAuthError('حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من البيانات المخزنة.');
+      }
+    }
+  };
+
+  const handleLogout = () => signOut(auth);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full"
+        />
+      </div>
+    );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f0f8fc] text-slate-800 flex flex-col font-sans" dir="rtl">
-      {/* Top Header Banner matching Image 1 Color Palette */}
-      <header className="bg-gradient-to-r from-[#105a8b] via-[#0077b6] to-[#0284c7] text-white shadow-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              aria-label="القائمة"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-xs flex items-center justify-center p-1 border border-white/20">
-                <img src={LOGO_BASE64} alt="شعار الجمعية" className="w-full h-full object-contain" />
-              </div>
-              <div>
-                <h1 className="font-black text-sm md:text-base leading-tight tracking-wide">
-                  جمعية تيفاوت للتنمية والتعاون
-                </h1>
-                <p className="text-[10px] text-sky-100 font-medium">منظومة تدبير مياه السقي</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 md:gap-3">
-            {/* User Profile Badge */}
-            <div className="flex items-center gap-2 bg-white/15 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-white/20">
-              <div className="w-6 h-6 rounded-full bg-white text-[#0077b6] font-bold text-xs flex items-center justify-center shrink-0">
-                {profile.displayName?.charAt(0) || '👤'}
-              </div>
-              <div className="hidden sm:block text-right">
-                <p className="text-xs font-bold leading-tight">{profile.displayName || profile.email}</p>
-                <p className="text-[10px] text-sky-200">
-                  {profile.role === 'amin' ? 'أمين المال' : profile.role === 'rais' ? 'رئيس الجمعية' : 'مكلف بالتحصيل'}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => signOut(auth)}
-              className="p-2 bg-white/10 hover:bg-red-500/80 rounded-xl text-white transition-colors"
-              title="تسجيل الخروج"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Sidebar / Desktop Navigation */}
-        <aside className={`
-          fixed lg:static inset-y-0 right-0 z-50 lg:z-0
-          w-72 lg:w-auto lg:col-span-3
-          bg-white lg:bg-transparent shadow-2xl lg:shadow-none
-          p-6 lg:p-0 flex flex-col justify-between
-          transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
-        `}>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between lg:hidden pb-3 border-b border-slate-100">
-              <h2 className="font-bold text-base text-slate-800">قائمة الأقسام</h2>
-              <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-lg hover:bg-slate-100">
-                <X className="w-5 h-5 text-slate-500" />
-              </button>
-            </div>
-
-            {/* Quick Balance Widget */}
-            <div className="bg-gradient-to-br from-[#006699] to-[#0088cc] text-white p-5 rounded-2xl shadow-md border border-sky-400/30">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-bold text-sky-100">رصيد حسابك المتاح</span>
-                <Wallet className="w-4 h-4 text-sky-200" />
-              </div>
-              <p className="text-2xl font-black">{formatCurrency(profile.balance || 0)}</p>
-              <p className="text-[10px] text-sky-200 mt-1">تحديث آني للمداخيل والمستحقات</p>
-            </div>
-
-            {/* Navigation Menu */}
-            <nav className="bg-white p-3 rounded-2xl border border-sky-100 shadow-sm space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all ${
-                      isActive
-                        ? 'bg-[#0088cc] text-white shadow-sm shadow-sky-200'
-                        : 'text-slate-600 hover:bg-sky-50 hover:text-[#0077b6]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {isActive && <ChevronRight className="w-3.5 h-3.5 rotate-180" />}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="pt-4 text-center text-[10px] text-slate-400">
-            جمعية تيفاوت للتنمية والتعاون • منظومة مياه السقي
-          </div>
-        </aside>
-
-        {/* Backdrop for mobile drawer */}
-        {sidebarOpen && (
-          <div 
-            onClick={() => setSidebarOpen(false)}
-            className="fixed inset-0 bg-black/40 z-40 lg:hidden backdrop-blur-2xs"
-          />
-        )}
-
-        {/* Content Area */}
-        <main className="lg:col-span-9 space-y-6">
-          <AnimatePresence mode="wait">
-            {activeTab === 'dashboard' && (
-              <div key="dashboard">
-                <DashboardView 
-                  subscribers={subscribers}
-                  sessions={sessions}
-                  expenses={expenses}
-                  profile={profile}
-                  users={users}
-                  onNavigate={setActiveTab}
-                />
-              </div>
-            )}
-
-            {activeTab === 'subscribers' && (
-              <div key="subscribers">
-                <SubscribersView 
-                  subscribers={subscribers} 
-                  profile={profile}
-                  users={users}
-                  showConfirm={showConfirm}
-                />
-              </div>
-            )}
-
-            {activeTab === 'irrigation' && (
-              <div key="irrigation">
-                <IrrigationView 
-                  sessions={sessions} 
-                  subscribers={subscribers} 
-                  profile={profile}
-                  users={users}
-                  showConfirm={showConfirm}
-                />
-              </div>
-            )}
-
-            {activeTab === 'expenses' && (
-              <div key="expenses">
-                <ExpensesView 
-                  expenses={expenses} 
-                  profile={profile}
-                  users={users}
-                />
-              </div>
-            )}
-
-            {activeTab === 'reports' && (
-              <div key="reports">
-                <ReportsView 
-                  sessions={sessions} 
-                  expenses={expenses} 
-                  transfers={transfers} 
-                  subscribers={subscribers}
-                />
-              </div>
-            )}
-
-            {activeTab === 'transfers' && (
-              <div key="transfers">
-                <TransfersView 
-                  users={users} 
-                  transfers={transfers} 
-                  profile={profile} 
-                />
-              </div>
-            )}
-
-            {activeTab === 'activity' && (
-              <div key="activity">
-                <ActivityLogView 
-                  users={users} 
-                  subscribers={subscribers} 
-                  sessions={sessions} 
-                  expenses={expenses} 
-                  transfers={transfers} 
-                />
-              </div>
-            )}
-
-            {activeTab === 'balance' && (
-              <div key="balance">
-                <AssociationBalanceView 
-                  users={users} 
-                  sessions={sessions} 
-                  expenses={expenses} 
-                  subscribers={subscribers} 
-                />
-              </div>
-            )}
-
-            {activeTab === 'financial' && (
-              <div key="financial">
-                <FinancialManagementView 
-                  sessions={sessions} 
-                  expenses={expenses} 
-                  subscribers={subscribers} 
-                  profile={profile} 
-                />
-              </div>
-            )}
-
-            {activeTab === 'settings' && profile.role === 'amin' && (
-              <div key="settings">
-                <SettingsView 
-                  users={users} 
-                  profile={profile} 
-                  showConfirm={showConfirm} 
-                />
-              </div>
-            )}
-          </AnimatePresence>
-        </main>
-      </div>
-
-      {/* Confirmation Modal */}
-      {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-200 text-right space-y-4"
-          >
-            <div className="flex items-center gap-2 text-amber-600">
-              <AlertCircle className="w-5 h-5" />
-              <h3 className="font-black text-lg text-slate-900">{confirmModal.title}</h3>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">{confirmModal.message}</p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
-              >
-                تراجع
-              </button>
-              <button
-                onClick={confirmModal.onConfirm}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs"
-              >
-                تأكيد الإجراء
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// 1. Auth Screen (Matching Image 2 SYGEAS Theme)
-// ==========================================
-function AuthScreen({ onLoginSuccess }: { onLoginSuccess: () => void }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      onLoginSuccess();
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-        setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
-      } else {
-        setError('تعذر تسجيل الدخول. يرجى التحقق من اتصالك بالإنترنت.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      onLoginSuccess();
-    } catch (err: any) {
-      console.error(err);
-      setError('تعذر تسجيل الدخول بواسطة Google.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-[#cbe8f8] via-[#e2f3fc] to-[#d6effa] flex flex-col justify-between font-sans selection:bg-sky-200" dir="rtl">
-      {/* Top Banner */}
-      <header className="bg-gradient-to-r from-[#105a8b] via-[#0077b6] to-[#0284c7] text-white p-4 shadow-md">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 p-1 flex items-center justify-center">
-              <img src={LOGO_BASE64} alt="شعار" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <h1 className="font-black text-lg md:text-xl">جمعية تيفاوت للتنمية والتعاون</h1>
-              <p className="text-xs text-sky-100">منظومة تدبير مياه السقي - دوار العامرية</p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-block px-3 py-1 bg-white/15 rounded-full text-xs font-bold border border-white/20">
-            مياه السقي
-          </span>
-        </div>
-      </header>
-
-      {/* Main Card (Image 2 style) */}
-      <div className="max-w-md w-full mx-auto px-4 py-8">
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
+  if (!user || !profile) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4 font-sans" dir="rtl">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-3xl shadow-xl border border-sky-100 p-8 space-y-6"
+          className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border border-stone-100"
         >
-          <div className="text-center space-y-2">
-            <div className="w-16 h-16 rounded-2xl bg-sky-50 text-[#0088cc] flex items-center justify-center mx-auto border border-sky-100 shadow-inner">
-              <Droplets className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900">منطقة تسجيل الدخول</h2>
-            <p className="text-xs text-slate-500">أدخل بيانات الاعتماد للمتابعة إلى لوحة التحكم واستخلاص السقي</p>
+          <img 
+            src={LOGO_BASE64} 
+            alt="لوجو الجمعية" 
+            className="w-24 h-24 rounded-full mx-auto mb-4 object-cover shadow-md border-2 border-emerald-600" 
+          />
+          <h1 className="text-2xl font-black text-stone-900 mb-1">جمعية تيفاوت للتنمية والتعاون</h1>
+          <p className="text-emerald-700 font-bold mb-2">دوار العامرية</p>
+          
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold mb-6">
+            <Lock className="w-3.5 h-3.5" />
+            <span>تطبيق خاص وسري لتسيير مياه السقي</span>
           </div>
-
-          {error && (
-            <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs font-bold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+          
+          {authError && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl text-sm mb-6 border border-red-100 font-medium">
+              {authError}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleEmailAuth} className="space-y-4 text-right mb-6">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">البريد الإلكتروني / الحساب</label>
-              <input
-                type="email"
+              <label className="block text-sm font-bold text-stone-700 mb-1">البريد الإلكتروني</label>
+              <input 
+                type="email" 
                 required
                 dir="ltr"
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-left"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-4 py-3 bg-sky-50/40 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-[#0088cc] focus:bg-white outline-none transition-all"
+                placeholder="user@example.com"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">كلمة المرور السرية</label>
-              <input
-                type="password"
+              <label className="block text-sm font-bold text-stone-700 mb-1">كلمة المرور</label>
+              <input 
+                type="password" 
                 required
                 dir="ltr"
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-left"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-3 bg-sky-50/40 border border-slate-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-[#0088cc] focus:bg-white outline-none transition-all"
               />
             </div>
-
-            <button
+            <button 
               type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-6 bg-[#0088cc] hover:bg-[#0077b6] text-white font-black text-base rounded-xl transition-all shadow-md shadow-sky-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg shadow-emerald-200 cursor-pointer"
             >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <span>تسجيل الدخول للنظام</span>
-              )}
+              تسجيل الدخول
             </button>
           </form>
 
-          <div className="relative flex items-center justify-center">
-            <div className="border-t border-slate-200 w-full"></div>
-            <span className="bg-white px-3 text-[11px] text-slate-400 font-bold absolute">أو الدخول عبر</span>
-          </div>
+          <p className="text-xs text-stone-400 leading-relaxed bg-stone-50 p-3 rounded-xl border border-stone-200">
+            ملاحظة: التسجيل مقفل. يتم إضافة وتفعيل الحسابات حصراً عن طريق إدارة الجمعية من قسم الإعدادات.
+          </p>
 
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full py-3 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-            </svg>
-            <span>تسجيل الدخول باستخدام Google</span>
-          </button>
+          <div className="mt-6 pt-4 border-t border-stone-100">
+            <p className="text-xs text-stone-400">جمعية تيفاوت للتنمية والتعاون - دوار العامرية © {new Date().getFullYear()}</p>
+          </div>
         </motion.div>
       </div>
+    );
+  }
 
-      <footer className="text-center p-4 text-xs text-slate-500">
-        جميع الحقوق محفوظة لجمعية تيفاوت للتنمية والتعاون © {new Date().getFullYear()}
-      </footer>
+  return (
+    <div className="min-h-screen bg-stone-50 flex font-sans" dir="rtl">
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 right-0 z-50 w-72 bg-white border-l border-stone-200 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
+        ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
+      `}>
+        <div className="h-full flex flex-col">
+          <div className="p-5 border-b border-stone-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img 
+                src={LOGO_BASE64} 
+                alt="لوجو الجمعية" 
+                className="w-12 h-12 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
+              />
+              <div className="flex flex-col min-w-0">
+                <span className="font-bold text-sm text-stone-900 leading-tight truncate">جمعية تيفاوت</span>
+                <span className="text-xs font-semibold text-emerald-700 leading-tight">للتنمية والتعاون</span>
+                <span className="text-[10px] text-stone-400 font-medium">دوار العامرية</span>
+              </div>
+            </div>
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-stone-400 hover:text-stone-600">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <nav className="flex-1 px-4 space-y-2 overflow-y-auto">
+            {isTabAllowed('dashboard') && (
+              <SidebarItem 
+                active={activeTab === 'dashboard'} 
+                onClick={() => {setActiveTab('dashboard'); setIsSidebarOpen(false);}}
+                icon={<LayoutDashboard className="w-5 h-5" />}
+                label="لوحة التحكم"
+              />
+            )}
+            {isTabAllowed('subscribers') && (
+              <SidebarItem 
+                active={activeTab === 'subscribers'} 
+                onClick={() => {setActiveTab('subscribers'); setIsSidebarOpen(false);}}
+                icon={<Users className="w-5 h-5" />}
+                label="المشتركين"
+              />
+            )}
+            {isTabAllowed('irrigation') && (
+              <SidebarItem 
+                active={activeTab === 'irrigation'} 
+                onClick={() => {setActiveTab('irrigation'); setIsSidebarOpen(false);}}
+                icon={<Droplets className="w-5 h-5" />}
+                label="حصص السقي"
+              />
+            )}
+            {isTabAllowed('expenses') && (
+              <SidebarItem 
+                active={activeTab === 'expenses'} 
+                onClick={() => {setActiveTab('expenses'); setIsSidebarOpen(false);}}
+                icon={<CreditCard className="w-5 h-5" />}
+                label="المصاريف"
+              />
+            )}
+            {isTabAllowed('reports') && (
+              <SidebarItem 
+                active={activeTab === 'reports'} 
+                onClick={() => {setActiveTab('reports'); setIsSidebarOpen(false);}}
+                icon={<BarChart3 className="w-5 h-5" />}
+                label="التقارير"
+              />
+            )}
+            {isTabAllowed('transfers') && (
+              <SidebarItem 
+                active={activeTab === 'transfers'} 
+                onClick={() => {setActiveTab('transfers'); setIsSidebarOpen(false);}}
+                icon={<ArrowRightLeft className="w-5 h-5" />}
+                label="تحويل الرصيد"
+              />
+            )}
+            {isTabAllowed('activity') && (
+              <SidebarItem 
+                active={activeTab === 'activity'} 
+                onClick={() => {setActiveTab('activity'); setIsSidebarOpen(false);}}
+                icon={<History className="w-5 h-5" />}
+                label="سجل العمليات"
+              />
+            )}
+            {isTabAllowed('balance') && (
+              <SidebarItem 
+                active={activeTab === 'balance'} 
+                onClick={() => {setActiveTab('balance'); setIsSidebarOpen(false);}}
+                icon={<Wallet className="w-5 h-5" />}
+                label="الرصيد"
+              />
+            )}
+            {isTabAllowed('financial') && (
+              <SidebarItem 
+                active={activeTab === 'financial'} 
+                onClick={() => {setActiveTab('financial'); setIsSidebarOpen(false);}}
+                icon={<BarChart3 className="w-5 h-5" />}
+                label="التدبير المالي"
+              />
+            )}
+            {profile.role === 'amin' && (
+              <SidebarItem 
+                active={activeTab === 'settings'} 
+                onClick={() => {setActiveTab('settings'); setIsSidebarOpen(false);}}
+                icon={<Settings className="w-5 h-5" />}
+                label="الإعدادات"
+              />
+            )}
+          </nav>
+
+          <div className="p-4 border-t border-stone-100">
+            <div className="bg-stone-50 rounded-2xl p-4 mb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 rounded-full bg-stone-200 overflow-hidden flex items-center justify-center">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                  ) : (
+                    <UserCircle className="w-6 h-6 text-stone-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-stone-900 truncate">{profile.displayName}</p>
+                  <p className="text-xs text-stone-500 uppercase tracking-wider">{profile.role === 'amin' ? 'أمين المال' : profile.role === 'rais' ? 'رئيس الجمعية' : 'مكلف بالتحصيل'}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs font-medium text-stone-600">
+                <span>الرصيد الحالي:</span>
+                <span className="text-emerald-600 font-bold">{formatCurrency(profile.balance)}</span>
+              </div>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-3 text-stone-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="font-medium">تسجيل الخروج</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="h-20 bg-white border-b border-stone-200 flex items-center justify-between px-6 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-stone-600">
+              <Menu className="w-6 h-6" />
+            </button>
+            <img 
+              src={LOGO_BASE64} 
+              alt="لوجو الجمعية" 
+              className="w-10 h-10 rounded-full object-cover border-2 border-emerald-600 shadow-xs shrink-0" 
+            />
+            <div className="flex flex-col">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900 leading-tight flex items-center gap-2">
+                جمعية تيفاوت للتنمية والتعاون
+                <span className="text-[11px] px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-100 hidden sm:inline-block">دوار العامرية</span>
+              </h2>
+              <span className="text-xs text-stone-500 font-medium">
+                {activeTab === 'dashboard' && 'لوحة التحكم'}
+                {activeTab === 'subscribers' && 'إدارة المشتركين'}
+                {activeTab === 'irrigation' && 'حصص السقي'}
+                {activeTab === 'expenses' && 'المصاريف'}
+                {activeTab === 'reports' && 'التقارير المالية'}
+                {activeTab === 'transfers' && 'تحويل الرصيد'}
+                {activeTab === 'activity' && 'سجل العمليات'}
+                {activeTab === 'settings' && 'الإعدادات'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-xs font-semibold text-stone-600">{new Date().toLocaleDateString('ar-MA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          <AnimatePresence mode="wait">
+            {isTabAllowed('dashboard') && activeTab === 'dashboard' && <div key="dashboard"><DashboardView subscribers={subscribers} sessions={sessions} expenses={expenses} profile={profile} users={users} /></div>}
+            {isTabAllowed('subscribers') && activeTab === 'subscribers' && <div key="subscribers"><SubscribersView subscribers={subscribers} profile={profile} /></div>}
+            {isTabAllowed('irrigation') && activeTab === 'irrigation' && <div key="irrigation"><IrrigationView subscribers={subscribers} sessions={sessions} profile={profile} showConfirm={showConfirm} users={users} /></div>}
+            {isTabAllowed('expenses') && activeTab === 'expenses' && <div key="expenses"><ExpensesView expenses={expenses} profile={profile} users={users} /></div>}
+            {isTabAllowed('reports') && activeTab === 'reports' && <div key="reports"><ReportsView sessions={sessions} expenses={expenses} transfers={transfers} subscribers={subscribers} /></div>}
+            {isTabAllowed('transfers') && activeTab === 'transfers' && <div key="transfers"><TransfersView users={users} transfers={transfers} profile={profile} /></div>}
+            {isTabAllowed('activity') && activeTab === 'activity' && <div key="activity"><ActivityLogView users={users} subscribers={subscribers} sessions={sessions} expenses={expenses} transfers={transfers} /></div>}
+            {isTabAllowed('balance') && activeTab === 'balance' && <div key="balance"><AssociationBalanceView users={users} sessions={sessions} expenses={expenses} subscribers={subscribers} /></div>}
+            {isTabAllowed('financial') && activeTab === 'financial' && <div key="financial"><FinancialManagementView sessions={sessions} expenses={expenses} subscribers={subscribers} profile={profile} /></div>}
+            {profile.role === 'amin' && activeTab === 'settings' && <div key="settings"><SettingsView users={users} profile={profile} showConfirm={showConfirm} /></div>}
+          </AnimatePresence>
+
+          <ConfirmModal 
+            isOpen={confirmModal.isOpen} 
+            onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            onConfirm={confirmModal.onConfirm}
+            title={confirmModal.title}
+            message={confirmModal.message}
+          />
+        </div>
+      </main>
     </div>
   );
 }
 
-// ==========================================
-// 2. Dashboard View
-// ==========================================
-function DashboardView({ 
-  subscribers, 
-  sessions, 
-  expenses, 
-  profile, 
-  users, 
-  onNavigate 
-}: { 
-  subscribers: Subscriber[]; 
-  sessions: IrrigationSession[]; 
-  expenses: Expense[]; 
-  profile: UserProfile; 
-  users: UserProfile[]; 
-  onNavigate: (tab: string) => void;
-}) {
-  const activeSessions = sessions.filter(s => s.status === 'paid');
-  const totalIrrigationIncome = activeSessions.reduce((acc, s) => acc + s.totalAmount, 0);
-  const totalSubscriptionsIncome = subscribers.reduce((acc, s) => acc + (s.subscriptionFeePaid || SUBSCRIPTION_FEE), 0);
-  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
-  const totalAssociationBalance = users.reduce((acc, u) => acc + (u.balance || 0), 0);
+// --- Sub-Views ---
 
-  // Group last 7 days chart data
-  const chartData = [
-    { name: 'السبت', income: 450 },
-    { name: 'الأحد', income: 600 },
-    { name: 'الإثنين', income: 300 },
-    { name: 'الثلاثاء', income: 750 },
-    { name: 'الأربعاء', income: 900 },
-    { name: 'الخميس', income: 400 },
-    { name: 'الجمعة', income: 850 },
-  ];
+function SidebarItem({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`
+        w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all
+        ${active ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'}
+      `}
+    >
+      {icon}
+      <span className="font-bold">{label}</span>
+      {active && <ChevronRight className="w-4 h-4 mr-auto" />}
+    </button>
+  );
+}
+
+function DashboardView({ subscribers, sessions, expenses, profile, users }: { subscribers: Subscriber[], sessions: IrrigationSession[], expenses: Expense[], profile: UserProfile, users: UserProfile[] }) {
+  const totalSubscribers = subscribers.length;
+  const totalHours = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.hours, 0);
+  const totalRevenue = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + (subscribers.length * SUBSCRIPTION_FEE);
+  const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
+  const associationBalance = users.reduce((acc, u) => acc + (u.balance || 0), 0);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* Top Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 mb-1">الرصيد الكلي للجمعية</p>
-            <p className="text-2xl font-black text-[#0088cc]">{formatCurrency(totalAssociationBalance)}</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-sky-50 text-[#0088cc] flex items-center justify-center">
-            <Wallet className="w-6 h-6" />
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-8"
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard icon={<Users className="text-blue-600" />} label="إجمالي المشتركين" value={totalSubscribers} color="bg-blue-50" />
+        <StatCard icon={<Droplets className="text-emerald-600" />} label="إجمالي ساعات السقي" value={`${totalHours} ساعة`} color="bg-emerald-50" />
+        <StatCard icon={<Wallet className="text-amber-600" />} label="إجمالي المداخيل" value={formatCurrency(totalRevenue)} color="bg-amber-50" />
+        <StatCard icon={<XCircle className="text-red-600" />} label="إجمالي المصاريف" value={formatCurrency(totalExpenses)} color="bg-red-50" />
+        <StatCard icon={<Wallet className="text-emerald-600" />} label="رصيد الجمعية" value={formatCurrency(associationBalance)} color="bg-emerald-100" />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+          <h3 className="text-lg font-bold text-stone-900 mb-6 flex items-center gap-2">
+            <History className="w-5 h-5 text-stone-400" />
+            آخر عمليات السقي
+          </h3>
+          <div className="space-y-4">
+            {sessions.slice(0, 5).map(session => (
+              <div key={session.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl">
+                <div>
+                  <p className="font-bold text-stone-900">{session.subscriberName}</p>
+                  <p className="text-xs text-stone-500">{formatDate(session.date)}</p>
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-emerald-600">{formatCurrency(session.totalAmount)}</p>
+                  <p className="text-xs text-stone-500">{session.hours} ساعة</p>
+                </div>
+              </div>
+            ))}
+            {sessions.length === 0 && <p className="text-center text-stone-400 py-8">لا توجد عمليات سقي مسجلة</p>}
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 mb-1">مداخيل السقي المستخلصة</p>
-            <p className="text-2xl font-black text-slate-900">{formatCurrency(totalIrrigationIncome)}</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <Droplets className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 mb-1">المشتركون المسجلون</p>
-            <p className="text-2xl font-black text-slate-900">{subscribers.length}</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-500 mb-1">إجمالي المصاريف</p>
-            <p className="text-2xl font-black text-red-600">{formatCurrency(totalExpenses)}</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-            <Receipt className="w-6 h-6" />
+        <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+          <h3 className="text-lg font-bold text-stone-900 mb-6 flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-stone-400" />
+            آخر المصاريف
+          </h3>
+          <div className="space-y-4">
+            {expenses.slice(0, 5).map(expense => (
+              <div key={expense.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl">
+                <div>
+                  <p className="font-bold text-stone-900">{expense.description}</p>
+                  <p className="text-xs text-stone-500">{formatDate(expense.date)}</p>
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-red-600">{formatCurrency(expense.amount)}</p>
+                </div>
+              </div>
+            ))}
+            {expenses.length === 0 && <p className="text-center text-stone-400 py-8">لا توجد مصاريف مسجلة</p>}
           </div>
         </div>
       </div>
 
-      {/* Quick Action POS Bar (Image 1 Style) */}
-      <div className="bg-gradient-to-r from-[#105a8b] via-[#0077b6] to-[#0284c7] text-white p-6 rounded-3xl shadow-lg space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-xl font-black">عمليات الاستخلاص الميداني والسقي</h3>
-            <p className="text-xs text-sky-100">استخدم الأزرار السريعة لتسجيل عملية سقي أو طباعة إيصال فوري</p>
-          </div>
-          <span className="text-xs font-bold px-3 py-1 bg-white/20 rounded-full self-start sm:self-auto border border-white/20">
-            ⚡ طباعة سريعة متصلة بـ RawBT
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          <button
-            onClick={() => onNavigate('irrigation')}
-            className="p-3 bg-white text-[#0077b6] hover:bg-sky-50 rounded-2xl font-black text-xs transition-all shadow-sm flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل سقي جديد</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('subscribers')}
-            className="p-3 bg-white/15 hover:bg-white/25 text-white rounded-2xl font-black text-xs transition-all border border-white/20 flex items-center justify-center gap-2"
-          >
-            <Users className="w-4 h-4" />
-            <span>إضافة مشترك جديد</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('reports')}
-            className="p-3 bg-white/15 hover:bg-white/25 text-white rounded-2xl font-black text-xs transition-all border border-white/20 flex items-center justify-center gap-2"
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>التقارير المالية</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Recent Sessions Table */}
-      <div className="bg-white rounded-3xl border border-sky-100 shadow-sm p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h3 className="font-bold text-base text-slate-900">آخر عمليات السقي المسجلة</h3>
-            <p className="text-xs text-slate-500">سجل بآخر حصص السقي التي تم تحصيلها</p>
-          </div>
-          <button
-            onClick={() => onNavigate('irrigation')}
-            className="text-xs font-bold text-[#0088cc] hover:underline"
-          >
-            عرض الكل ({sessions.length})
-          </button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead>
-              <tr className="bg-sky-50/60 text-slate-600 font-bold border-b border-slate-100">
-                <th className="p-3">رقم الوصل</th>
-                <th className="p-3">المشترك</th>
-                <th className="p-3">التاريخ</th>
-                <th className="p-3">الساعات</th>
-                <th className="p-3">المبلغ</th>
-                <th className="p-3">الحالة</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {sessions.slice(0, 5).map(s => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="p-3 font-mono font-bold text-[#006699]">
-                    {s.receiptNumber || `IRR-${s.id.slice(-6).toUpperCase()}`}
-                  </td>
-                  <td className="p-3 font-bold text-slate-900">{s.subscriberName}</td>
-                  <td className="p-3 text-slate-500">{formatDate(s.date)}</td>
-                  <td className="p-3 text-slate-700 font-medium">{s.hours} س</td>
-                  <td className="p-3 font-bold text-[#0088cc]">{formatCurrency(s.totalAmount)}</td>
-                  <td className="p-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      s.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
-                    }`}>
-                      {s.status === 'paid' ? 'مؤدى' : 'ملغى'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">لا توجد عمليات سقي مسجلة بعد</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+        <h3 className="text-lg font-bold text-stone-900 mb-6 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-stone-400" />
+          إحصائيات السقي السنوية
+        </h3>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={Array.from({ length: 12 }, (_, i) => {
+              const monthData = sessions.filter(s => s.status === 'paid' && new Date(s.date).getMonth() === i);
+              return {
+                name: ['ينا', 'فبر', 'مار', 'أبر', 'ماي', 'يون', 'يول', 'أغس', 'سبت', 'أكت', 'نوف', 'ديس'][i],
+                hours: monthData.reduce((acc, s) => acc + s.hours, 0)
+              };
+            })}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="hours" fill="#10b981" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// ==========================================
-// 3. Subscribers View
-// ==========================================
-function SubscribersView({ 
-  subscribers, 
-  profile, 
-  users, 
-  showConfirm
-}: { 
-  subscribers: Subscriber[]; 
-  profile: UserProfile; 
-  users: UserProfile[]; 
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void;
-}) {
+function StatCard({ icon, label, value, color }: { icon: React.ReactNode, label: string, value: string | number, color: string }) {
+  return (
+    <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex items-center gap-5">
+      <div className={`w-14 h-14 ${color} rounded-2xl flex items-center justify-center shrink-0`}>
+        {React.cloneElement(icon as React.ReactElement, { className: 'w-7 h-7' })}
+      </div>
+      <div>
+        <p className="text-sm font-medium text-stone-500 mb-1">{label}</p>
+        <p className="text-2xl font-bold text-stone-900">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function SubscribersView({ subscribers, profile, users }: { subscribers: Subscriber[], profile: UserProfile, users?: UserProfile[] }) {
   const [isAdding, setIsAdding] = useState(false);
-  const [editingSub, setEditingSub] = useState<Subscriber | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [nationalId, setNationalId] = useState('');
-  const [subFee, setSubFee] = useState(SUBSCRIPTION_FEE);
-  const [selectedSubForPrint, setSelectedSubForPrint] = useState<Subscriber | null>(null);
+  const [search, setSearch] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const handleStandardPrint = useReactToPrint({
+  const handlePrint = useReactToPrint({
     contentRef: printRef,
   });
 
-  const handleRawbtPrint = (sub: Subscriber) => {
-    const collectorName = users?.find(u => u.uid === sub.createdBy)?.displayName || profile.displayName;
-    const receiptText = formatSubscriptionRawBT(sub, collectorName);
-    printViaRawBT(receiptText);
-  };
-
-  const handleAddOrUpdate = async (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-
+    setIsSubmitting(true);
     try {
-      if (editingSub) {
-        await updateDoc(doc(db, 'subscribers', editingSub.id), {
-          name: name.trim(),
-          phone: phone.trim(),
-          nationalId: nationalId.trim(),
-          subscriptionFeePaid: subFee
-        });
-        setEditingSub(null);
-      } else {
-        const receiptNo = `SUB-${Date.now().toString().slice(-6)}`;
-        const docRef = await addDoc(collection(db, 'subscribers'), {
-          name: name.trim(),
-          phone: phone.trim(),
-          nationalId: nationalId.trim(),
-          subscriptionDate: new Date().toISOString(),
-          subscriptionFeePaid: subFee,
-          status: 'active',
-          receiptNumber: receiptNo,
-          createdBy: profile.uid
-        });
-
-        // Update collector balance
-        const userRef = doc(db, 'users', profile.uid);
-        await updateDoc(userRef, {
-          balance: (profile.balance || 0) + subFee
-        });
-
-        // Open print modal
-        const newSubObj: Subscriber = {
-          id: docRef.id,
-          name: name.trim(),
-          phone: phone.trim(),
-          nationalId: nationalId.trim(),
-          subscriptionDate: new Date().toISOString(),
-          subscriptionFeePaid: subFee,
-          status: 'active',
-          receiptNumber: receiptNo,
-          createdBy: profile.uid
-        };
-        setSelectedSubForPrint(newSubObj);
-      }
+      const receiptNum = `SUB-${Date.now().toString().slice(-6)}`;
+      const newSub = {
+        name: name.trim(),
+        phone: phone.trim(),
+        nationalId: nationalId.trim(),
+        subscriptionDate: new Date().toISOString(),
+        subscriptionFeePaid: SUBSCRIPTION_FEE,
+        balance: 0,
+        receiptNumber: receiptNum
+      };
+      const docRef = await addDoc(collection(db, 'subscribers'), { ...newSub, createdBy: profile.uid });
+      
+      const userRef = doc(db, 'users', profile.uid);
+      await updateDoc(userRef, {
+        balance: (profile.balance || 0) + SUBSCRIPTION_FEE
+      });
 
       setName('');
       setPhone('');
       setNationalId('');
-      setSubFee(SUBSCRIPTION_FEE);
       setIsAdding(false);
+      
+      const collectorUser = users?.find(u => u.uid === profile.uid) || profile;
+      setSelectedSubscriber({ 
+        id: docRef.id, 
+        ...newSub, 
+        collectorName: profile.displayName,
+        collectorSignatureUrl: collectorUser.signatureUrl
+      } as any);
+      setTimeout(() => handlePrint(), 400);
     } catch (err) {
-      handleFirestoreError(err, editingSub ? OperationType.UPDATE : OperationType.CREATE, 'subscribers');
+      handleFirestoreError(err, OperationType.CREATE, 'subscribers');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubscriber || !name.trim()) return;
+    try {
+      await updateDoc(doc(db, 'subscribers', selectedSubscriber.id), {
+        name: name.trim(),
+        phone: phone.trim(),
+        nationalId: nationalId.trim()
+      });
+      setIsEditing(false);
+      setSelectedSubscriber(null);
+      setName('');
+      setPhone('');
+      setNationalId('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'subscribers');
+    }
+  };
+
+  const startEdit = (sub: Subscriber) => {
+    setSelectedSubscriber(sub);
+    setName(sub.name);
+    setPhone(sub.phone || '');
+    setNationalId(sub.nationalId || '');
+    setIsEditing(true);
+  };
+
   const filtered = subscribers.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.nationalId && s.nationalId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (s.phone && s.phone.includes(searchTerm))
+    s.name.includes(search) || 
+    s.phone?.includes(search) || 
+    s.nationalId?.includes(search) || 
+    s.receiptNumber?.includes(search)
   );
+  
+  const debtors = subscribers.filter(s => (s.subscriptionFeePaid < SUBSCRIPTION_FEE) || (s.balance && s.balance < 0));
+
+  const sendReminder = (sub: Subscriber) => {
+    alert(`تم إرسال تذكير للمشترك ${sub.name} عبر الهاتف ${sub.phone || 'بدون رقم'}`);
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-      {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث بالاسم أو رقم البطاقة أو الهاتف..."
-            className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#0088cc] outline-none shadow-2xs"
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="space-y-6"
+    >
+      {debtors.length > 0 && (
+        <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
+          <h2 className="text-lg font-bold text-red-900 mb-4">المشتركون المتأخرون في الدفع ({debtors.length})</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {debtors.map(sub => (
+              <div key={sub.id} className="bg-white p-4 rounded-xl border border-red-100 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-stone-900">{sub.name}</p>
+                  <p className="text-sm text-red-600">الرصيد: {formatCurrency(sub.balance || 0)}</p>
+                </div>
+                <button 
+                  onClick={() => sendReminder(sub)}
+                  className="bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 px-4 rounded-xl transition-all"
+                >
+                  تذكير
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="relative w-full sm:w-96">
+          <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+          <input 
+            type="text" 
+            placeholder="بحث بالاسم، الهاتف، أو رقم الوصل..." 
+            className="w-full pr-12 pl-4 py-3 bg-white border border-stone-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button 
             onClick={() => {
-              setEditingSub(null);
               setName('');
               setPhone('');
               setNationalId('');
-              setSubFee(SUBSCRIPTION_FEE);
               setIsAdding(true);
             }}
-            className="px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b6] text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-sky-200 flex items-center gap-1.5"
+            className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-100"
           >
-            <Plus className="w-4 h-4" />
-            <span>إضافة مشترك جديد</span>
+            <Plus className="w-5 h-5" />
+            إضافة مشترك جديد
+          </button>
+          <button 
+            onClick={() => downloadCSV(subscribers, [
+              { header: 'رقم الوصل', accessor: (s) => s.receiptNumber || `SUB-${s.id.slice(-6).toUpperCase()}` },
+              { header: 'الاسم', accessor: (s) => s.name },
+              { header: 'رقم البطاقة الوطنية', accessor: (s) => s.nationalId || '-' },
+              { header: 'الهاتف', accessor: (s) => s.phone || '-' },
+              { header: 'تاريخ الاشتراك', accessor: (s) => formatDate(s.subscriptionDate) },
+              { header: 'واجب الاشتراك', accessor: (s) => s.subscriptionFeePaid }
+            ], 'المشتركون')}
+            className="bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2"
+          >
+            <Download className="w-5 h-5" />
+            تصدير CSV
           </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-3xl border border-sky-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right">
             <thead>
-              <tr className="bg-sky-50/70 border-b border-slate-100 text-slate-700 font-bold">
-                <th className="p-4">رقم الوصل</th>
-                <th className="p-4">اسم المشترك</th>
-                <th className="p-4">رقم البطاقة</th>
-                <th className="p-4">الهاتف</th>
-                <th className="p-4">تاريخ الاشتراك</th>
-                <th className="p-4">واجب الانخراط</th>
-                <th className="p-4">الإجراءات والطباعة</th>
+              <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-600">رقم الوصل</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الاسم</th>
+                <th className="px-6 py-4 font-bold text-stone-600">رقم البطاقة الوطنية</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الهاتف</th>
+                <th className="px-6 py-4 font-bold text-stone-600">تاريخ الاشتراك</th>
+                <th className="px-6 py-4 font-bold text-stone-600">واجب الاشتراك</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الإجراءات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-stone-100">
               {filtered.map(sub => {
                 const subReceiptNo = sub.receiptNumber || `SUB-${sub.id.slice(-6).toUpperCase()}`;
                 return (
-                  <tr key={sub.id} className="hover:bg-slate-50">
-                    <td className="p-4 font-mono font-bold text-[#006699]">
-                      <span className="px-2 py-0.5 bg-sky-50 text-[#0077b6] rounded-md border border-sky-200">
+                  <tr key={sub.id} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4 font-mono font-bold text-xs text-emerald-900">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100 inline-block">
                         {subReceiptNo}
                       </span>
                     </td>
-                    <td className="p-4 font-black text-slate-900">{sub.name}</td>
-                    <td className="p-4 font-mono font-semibold text-slate-600">{sub.nationalId || '—'}</td>
-                    <td className="p-4 font-mono text-slate-600">{sub.phone || '—'}</td>
-                    <td className="p-4 text-slate-500">{formatDate(sub.subscriptionDate)}</td>
-                    <td className="p-4 font-black text-[#0088cc]">
-                      {formatCurrency(sub.subscriptionFeePaid || SUBSCRIPTION_FEE)}
-                    </td>
-                    <td className="p-4 flex items-center gap-1.5">
-                      {/* Sunmi RawBT Print Button */}
-                      <button
-                        onClick={() => handleRawbtPrint(sub)}
-                        className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-[#0077b6] rounded-lg font-bold border border-sky-200 flex items-center gap-1"
-                        title="طباعة حرارية عبر RawBT"
-                      >
-                        <Smartphone className="w-3.5 h-3.5" />
-                        <span>RawBT</span>
-                      </button>
-
-                      {/* Standard Print */}
-                      <button
-                        onClick={() => {
-                          setSelectedSubForPrint(sub);
-                          setTimeout(() => handleStandardPrint(), 200);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-[#0088cc] rounded-lg"
-                        title="طباعة PDF / A4"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </button>
-
-                      {/* Edit */}
-                      <button
-                        onClick={() => {
-                          setEditingSub(sub);
-                          setName(sub.name);
-                          setPhone(sub.phone || '');
-                          setNationalId(sub.nationalId || '');
-                          setSubFee(sub.subscriptionFeePaid || SUBSCRIPTION_FEE);
-                          setIsAdding(true);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
+                    <td className="px-6 py-4 font-bold text-stone-900">{sub.name}</td>
+                    <td className="px-6 py-4 text-stone-600">{sub.nationalId || '-'}</td>
+                    <td className="px-6 py-4 text-stone-600">{sub.phone || '-'}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(sub.subscriptionDate)}</td>
+                    <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(sub.subscriptionFeePaid)}</td>
+                    <td className="px-6 py-4 flex items-center gap-2">
+                      <button 
+                        onClick={() => startEdit(sub)}
+                        className="p-2 text-stone-400 hover:text-blue-600 transition-colors"
                         title="تعديل"
                       >
-                        <PenTool className="w-4 h-4" />
+                        <Settings className="w-5 h-5" />
                       </button>
-
-                      {/* Delete */}
-                      <button
+                      <button 
                         onClick={() => {
-                          showConfirm('حذف المشترك', `هل أنت متأكد من حذف المشترك "${sub.name}"؟`, async () => {
+                          const collectorUser = users?.find(u => u.uid === (sub.createdBy || profile.uid)) || profile;
+                          setSelectedSubscriber({ 
+                            ...sub, 
+                            receiptNumber: subReceiptNo, 
+                            collectorName: collectorUser.displayName || profile.displayName,
+                            collectorSignatureUrl: collectorUser.signatureUrl
+                          } as any); 
+                          setTimeout(() => handlePrint(), 100);
+                        }}
+                        className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                        title="طباعة الوصل"
+                      >
+                        <Printer className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          if (confirm('هل أنت متأكد من حذف هذا المشترك؟ سيتم خصم رسوم الاشتراك من رصيد المسجل.')) {
                             try {
                               await deleteDoc(doc(db, 'subscribers', sub.id));
+                              if (sub.createdBy) {
+                                const userRef = doc(db, 'users', sub.createdBy);
+                                const userDoc = await getDoc(userRef);
+                                if (userDoc.exists()) {
+                                  await updateDoc(userRef, {
+                                    balance: (userDoc.data().balance || 0) - sub.subscriptionFeePaid
+                                  });
+                                }
+                              }
                             } catch (err) {
                               handleFirestoreError(err, OperationType.DELETE, 'subscribers');
                             }
-                          });
+                          }
                         }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"
+                        className="p-2 text-stone-400 hover:text-red-600 transition-colors"
                         title="حذف"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </td>
                   </tr>
@@ -1268,7 +1346,7 @@ function SubscribersView({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">لا يوجد مشتركون مطابقون للبحث</td>
+                  <td colSpan={7} className="px-6 py-12 text-center text-stone-400">لا يوجد مشتركين بهذا البحث</td>
                 </tr>
               )}
             </tbody>
@@ -1276,85 +1354,81 @@ function SubscribersView({
         </div>
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Add Modal */}
       {isAdding && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 text-right space-y-4"
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">
-                {editingSub ? 'تعديل بيانات المشترك' : 'إضافة مشترك جديد'}
-              </h3>
-              <button onClick={() => setIsAdding(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500">
-                <X className="w-5 h-5" />
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-stone-900">إضافة مشترك جديد</h3>
+              <button 
+                onClick={() => setIsAdding(false)} 
+                className="text-stone-400 hover:text-stone-600 p-1"
+              >
+                <X className="w-6 h-6" />
               </button>
             </div>
-
-            <form onSubmit={handleAddOrUpdate} className="space-y-3">
+            
+            <form onSubmit={handleAdd} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الاسم الكامل للمشترك *</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-bold text-stone-700 mb-2">اسم المشترك الكامل *</label>
+                <input 
+                  autoFocus
                   required
+                  type="text" 
+                  placeholder="مثال: محمد بن علي"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="مثال: لحسن العامري"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#0088cc] outline-none"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم البطاقة الوطنية</label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={nationalId}
-                    onChange={(e) => setNationalId(e.target.value)}
-                    placeholder="مثال: PA123456"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-[#0088cc] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رقم الهاتف</label>
-                  <input
-                    type="tel"
-                    dir="ltr"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="06XXXXXXXX"
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-[#0088cc] outline-none"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">مبلغ واجب الانخراط (درهم)</label>
-                <input
-                  type="number"
-                  required
-                  value={subFee}
-                  onChange={(e) => setSubFee(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-[#0088cc] focus:ring-2 focus:ring-[#0088cc] outline-none"
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم البطاقة الوطنية (CIN)</label>
+                <input 
+                  type="text" 
+                  placeholder="مثال: AB123456"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={nationalId}
+                  onChange={(e) => setNationalId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم الهاتف</label>
+                <input 
+                  type="tel" 
+                  placeholder="مثال: 0661234567"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-1">
+                <div className="flex justify-between text-sm font-bold text-emerald-900">
+                  <span>واجب الاشتراك المستحق:</span>
+                  <span>{formatCurrency(SUBSCRIPTION_FEE)}</span>
+                </div>
+                <p className="text-xs text-emerald-700">سيتم إصدار وصل رقمي آلي إضافة إلى تحويل المبلغ لصندوق الجمعية.</p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="submit"
+                  disabled={isSubmitting || !name.trim()}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-300 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  {isSubmitting ? 'جاري الإضافة...' : 'إضافة وطباعة الوصل'}
+                </button>
+                <button 
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
                 >
                   إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-[#0088cc] hover:bg-[#0077b6] text-white font-black text-xs rounded-xl shadow-md shadow-sky-200"
-                >
-                  {editingSub ? 'حفظ التعديلات' : 'تأكيد الإضافة'}
                 </button>
               </div>
             </form>
@@ -1362,60 +1436,95 @@ function SubscribersView({
         </div>
       )}
 
-      {/* Hidden Printable Receipt */}
+      {/* Edit Modal */}
+      {isEditing && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+          >
+            <h3 className="text-2xl font-bold text-stone-900 mb-6">تعديل بيانات المشترك</h3>
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">اسم المشترك</label>
+                <input 
+                  autoFocus
+                  required
+                  type="text" 
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم البطاقة الوطنية</label>
+                <input 
+                  type="text" 
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={nationalId}
+                  onChange={(e) => setNationalId(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">رقم الهاتف</label>
+                <input 
+                  type="tel" 
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all"
+                >
+                  حفظ التعديلات
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Hidden Print Component */}
       <div className="hidden">
-        {selectedSubForPrint && (
-          <ReceiptPrint ref={printRef} data={selectedSubForPrint} type="subscription" />
-        )}
+        {selectedSubscriber && <ReceiptPrint ref={printRef} data={selectedSubscriber} type="subscription" />}
       </div>
     </motion.div>
   );
 }
 
-// ==========================================
-// 4. Irrigation View (With Sunmi RawBT Instant Print)
-// ==========================================
-function IrrigationView({ 
-  sessions, 
-  subscribers, 
-  profile, 
-  users, 
-  showConfirm 
-}: { 
-  sessions: IrrigationSession[]; 
-  subscribers: Subscriber[]; 
-  profile: UserProfile; 
-  users: UserProfile[]; 
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void;
-}) {
+function IrrigationView({ subscribers, sessions, profile, showConfirm, users }: { subscribers: Subscriber[], sessions: IrrigationSession[], profile: UserProfile, showConfirm: (title: string, message: string, onConfirm: () => void) => void, users?: UserProfile[] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [selectedSubId, setSelectedSubId] = useState('');
   const [hours, setHours] = useState(1);
   const [selectedSession, setSelectedSession] = useState<IrrigationSession | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  const handleStandardPrint = useReactToPrint({
+  const handlePrint = useReactToPrint({
     contentRef: printRef,
   });
-
-  const handleRawbtPrintSession = (session: IrrigationSession) => {
-    const collectorName = users?.find(u => u.uid === session.collectedBy)?.displayName || profile.displayName;
-    const receiptText = formatIrrigationRawBT(session, collectorName);
-    printViaRawBT(receiptText);
-  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSubId || hours <= 0) return;
-
+    
     const sub = subscribers.find(s => s.id === selectedSubId);
     if (!sub) return;
 
     try {
       const totalAmount = hours * IRRIGATION_RATE;
       const workerWage = hours * WORKER_WAGE_PER_HOUR;
-      const receiptNumber = `IRR-${Date.now().toString().slice(-6)}`;
-
+      
       const newSession = {
         subscriberId: sub.id,
         subscriberName: sub.name,
@@ -1424,28 +1533,30 @@ function IrrigationView({
         totalAmount,
         workerWage,
         date: new Date().toISOString(),
-        status: 'paid' as const,
+        status: 'paid',
         collectedBy: profile.uid,
-        receiptNumber
+        receiptNumber: `IRR-${Date.now().toString().slice(-6)}`
       };
-
+      
       const docRef = await addDoc(collection(db, 'sessions'), { ...newSession, createdBy: profile.uid });
-
+      
       // Update collector balance
       const userRef = doc(db, 'users', profile.uid);
       await updateDoc(userRef, {
         balance: (profile.balance || 0) + totalAmount
       });
 
-      const sessionObj: IrrigationSession = { id: docRef.id, ...newSession };
-      setSelectedSession(sessionObj);
-
-      // Auto trigger RawBT print on Sunmi device
-      handleRawbtPrintSession(sessionObj);
-
       setHours(1);
       setSelectedSubId('');
       setIsAdding(false);
+      
+      setSelectedSession({ 
+        id: docRef.id, 
+        ...newSession, 
+        collectorName: profile.displayName,
+        collectorSignatureUrl: (users?.find(u => u.uid === profile.uid) || profile).signatureUrl
+      } as any);
+      setTimeout(() => handlePrint(), 500);
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'sessions');
     }
@@ -1455,6 +1566,8 @@ function IrrigationView({
     showConfirm('إلغاء الوصل', 'هل أنت متأكد من إلغاء هذا الوصل؟ سيتم خصم المبلغ من رصيد المكلف.', async () => {
       try {
         await updateDoc(doc(db, 'sessions', session.id), { status: 'cancelled' });
+        
+        // Deduct from collector balance
         const collectorRef = doc(db, 'users', session.collectedBy);
         const collectorDoc = await getDoc(collectorRef);
         if (collectorDoc.exists()) {
@@ -1469,322 +1582,120 @@ function IrrigationView({
   };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-      {/* Header */}
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="space-y-6"
+    >
       <div className="flex justify-end">
-        <button
+        <button 
           onClick={() => setIsAdding(true)}
-          className="bg-[#0088cc] hover:bg-[#0077b6] text-white font-black py-3 px-6 rounded-2xl transition-all shadow-md shadow-sky-200 flex items-center gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2 shadow-lg shadow-emerald-100"
         >
           <Plus className="w-5 h-5" />
-          <span>تسجيل حصة سقي جديدة (استخلاص)</span>
+          تسجيل حصة سقي جديدة
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-3xl border border-sky-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-right">
             <thead>
-              <tr className="bg-sky-50/70 border-b border-slate-100 text-slate-700 font-bold">
-                <th className="p-4">رقم الوصل</th>
-                <th className="p-4">المشترك</th>
-                <th className="p-4">المكلف بالمستحقات</th>
-                <th className="p-4">التاريخ</th>
-                <th className="p-4">الساعات</th>
-                <th className="p-4">المبلغ</th>
-                <th className="p-4">الحالة</th>
-                <th className="p-4">الإجراءات والطباعة</th>
+              <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-600">رقم الوصل</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المشترك</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المكلف بالمستحقات</th>
+                <th className="px-6 py-4 font-bold text-stone-600">التاريخ</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الساعات</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المبلغ</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الحالة</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الإجراءات</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-stone-100">
               {sessions.map(session => {
                 const collectorName = users?.find(u => u.uid === session.collectedBy)?.displayName || profile.displayName;
                 const irrReceiptNo = session.receiptNumber || `IRR-${session.id.slice(-6).toUpperCase()}`;
                 return (
-                  <tr key={session.id} className={`hover:bg-slate-50 ${session.status === 'cancelled' ? 'opacity-50 grayscale' : ''}`}>
-                    <td className="p-4 font-mono font-bold text-[#006699]">
-                      <span className="px-2 py-0.5 bg-sky-50 text-[#0077b6] rounded-md border border-sky-200">
+                  <tr key={session.id} className={`hover:bg-stone-50 transition-colors ${session.status === 'cancelled' ? 'opacity-50 grayscale' : ''}`}>
+                    <td className="px-6 py-4 font-mono font-bold text-xs text-emerald-900">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100 inline-block">
                         {irrReceiptNo}
                       </span>
                     </td>
-                    <td className="p-4 font-black text-slate-900">{session.subscriberName}</td>
-                    <td className="p-4 font-bold text-sky-800">{collectorName}</td>
-                    <td className="p-4 text-slate-500">{formatDate(session.date)}</td>
-                    <td className="p-4 text-slate-700 font-medium">{session.hours} ساعة</td>
-                    <td className="p-4 font-black text-[#0088cc]">{formatCurrency(session.totalAmount)}</td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        session.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
-                      }`}>
+                    <td className="px-6 py-4 font-bold text-stone-900">{session.subscriberName}</td>
+                    <td className="px-6 py-4 text-xs font-semibold text-emerald-800">{collectorName}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(session.date)}</td>
+                    <td className="px-6 py-4 text-stone-600">{session.hours} ساعة</td>
+                    <td className="px-6 py-4 font-bold text-emerald-600">{formatCurrency(session.totalAmount)}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${session.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                         {session.status === 'paid' ? 'مؤدى' : 'ملغى'}
                       </span>
                     </td>
-                    <td className="p-4 flex items-center gap-1.5">
-                      {/* Sunmi RawBT Print Button */}
-                      <button
-                        onClick={() => handleRawbtPrintSession(session)}
-                        className="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-[#0077b6] rounded-lg font-bold border border-sky-200 flex items-center gap-1"
-                        title="طباعة إيصال في آلة Sunmi عبر RawBT"
-                      >
-                        <Smartphone className="w-3.5 h-3.5" />
-                        <span>RawBT</span>
-                      </button>
-
-                      {/* Standard Print */}
-                      <button
+                    <td className="px-6 py-4 flex items-center gap-2">
+                      <button 
                         onClick={() => {
                           const collectorUser = users?.find(u => u.uid === session.collectedBy) || profile;
-                          setSelectedSession({
-                            ...session,
-                            collectorName,
-                            collectorSignatureUrl: collectorUser.signatureUrl
-                          } as any);
-                          setTimeout(() => handleStandardPrint(), 150);
+                          setSelectedSession({ 
+                            ...session, 
+                            collectorName, 
+                            collectorSignatureUrl: collectorUser.signatureUrl 
+                          } as any); 
+                          setTimeout(() => handlePrint(), 100);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-[#0088cc] rounded-lg"
-                        title="معاينة وطباعة عادية"
+                        className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                        title="طباعة"
                       >
-                        <Printer className="w-4 h-4" />
+                        <Printer className="w-5 h-5" />
                       </button>
-
-                      {session.status === 'paid' && (
-                        <button
-                          onClick={() => handleCancel(session)}
-                          className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg"
-                          title="إلغاء الوصل"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      )}
-
-                      {session.status === 'paid' && !session.workerWagePaid && profile.role === 'amin' && (
-                        <button
-                          onClick={() => updateDoc(doc(db, 'sessions', session.id), { workerWagePaid: true })}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg"
-                          title="تأكيد أداء أجرة العامل"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          showConfirm('حذف الوصل', 'هل أنت متأكد من حذف هذه العملية نهائياً؟', async () => {
-                            try {
-                              await deleteDoc(doc(db, 'sessions', session.id));
-                              const collectorRef = doc(db, 'users', session.collectedBy);
-                              const collectorDoc = await getDoc(collectorRef);
-                              if (collectorDoc.exists()) {
-                                await updateDoc(collectorRef, {
-                                  balance: (collectorDoc.data().balance || 0) - session.totalAmount
-                                });
-                              }
-                            } catch (err) {
-                              handleFirestoreError(err, OperationType.DELETE, 'sessions');
+                    {session.status === 'paid' && (
+                      <button 
+                        onClick={() => handleCancel(session)}
+                        className="p-2 text-stone-400 hover:text-amber-600 transition-colors"
+                        title="إلغاء"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </button>
+                    )}
+                    {session.status === 'paid' && !session.workerWagePaid && profile.role === 'amin' && (
+                      <button 
+                        onClick={() => updateDoc(doc(db, 'sessions', session.id), { workerWagePaid: true })}
+                        className="p-2 text-stone-400 hover:text-blue-600 transition-colors"
+                        title="تأكيد أداء أجرة العامل"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                      </button>
+                    )}
+                    <button 
+                      onClick={async () => {
+                        if (confirm('هل أنت متأكد من حذف هذه العملية؟ سيتم خصم المبلغ من رصيد المكلف.')) {
+                          try {
+                            await deleteDoc(doc(db, 'sessions', session.id));
+                            const collectorRef = doc(db, 'users', session.collectedBy);
+                            const collectorDoc = await getDoc(collectorRef);
+                            if (collectorDoc.exists()) {
+                               await updateDoc(collectorRef, {
+                                 balance: (collectorDoc.data().balance || 0) - session.totalAmount
+                               });
                             }
-                          });
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                          } catch (err) {
+                            handleFirestoreError(err, OperationType.DELETE, 'sessions');
+                          }
+                        }
+                      }}
+                      className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+                      title="حذف"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">لا توجد عمليات سقي مسجلة</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add Session Modal */}
-      {isAdding && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 text-right space-y-4"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">تسجيل حصة سقي واستخلاص</h3>
-              <button onClick={() => setIsAdding(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">اختر المشترك *</label>
-                <select
-                  required
-                  value={selectedSubId}
-                  onChange={(e) => setSelectedSubId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-sky-50/50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-[#0088cc] outline-none"
-                >
-                  <option value="">-- اختر مشتركاً --</option>
-                  {subscribers.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">عدد ساعات السقي</label>
-                <input
-                  type="number"
-                  required
-                  min="0.5"
-                  step="0.5"
-                  value={hours}
-                  onChange={(e) => setHours(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 bg-sky-50/50 border border-slate-300 rounded-xl text-sm font-black text-slate-900 focus:ring-2 focus:ring-[#0088cc] outline-none"
-                />
-              </div>
-
-              <div className="bg-sky-50/70 p-4 rounded-2xl space-y-2 border border-sky-100 text-xs">
-                <div className="flex justify-between items-center text-slate-600">
-                  <span>ثمن ساعة السقي:</span>
-                  <span className="font-bold">{formatCurrency(IRRIGATION_RATE)}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600">
-                  <span>أجرة العامل ({hours} س):</span>
-                  <span className="font-bold">{formatCurrency(hours * WORKER_WAGE_PER_HOUR)}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-sky-200 text-[#006699] font-black text-base">
-                  <span>المجموع للأداء:</span>
-                  <span>{formatCurrency(hours * IRRIGATION_RATE)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-[#0088cc] hover:bg-[#0077b6] text-white font-black text-xs rounded-xl shadow-md shadow-sky-200 flex items-center gap-1.5"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>تأكيد الأداء والطباعة الفورية</span>
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Hidden Print Container */}
-      <div className="hidden">
-        {selectedSession && <ReceiptPrint ref={printRef} data={selectedSession} type="irrigation" />}
-      </div>
-    </motion.div>
-  );
-}
-
-// ==========================================
-// 5. Expenses View
-// ==========================================
-function ExpensesView({ 
-  expenses, 
-  profile, 
-  users 
-}: { 
-  expenses: Expense[]; 
-  profile: UserProfile; 
-  users?: UserProfile[]; 
-}) {
-  const [isAdding, setIsAdding] = useState(false);
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState<number>(0);
-
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!description.trim() || amount <= 0) return;
-
-    try {
-      await addDoc(collection(db, 'expenses'), {
-        description: description.trim(),
-        amount,
-        date: new Date().toISOString(),
-        addedBy: profile.uid,
-        createdBy: profile.uid
-      });
-
-      setDescription('');
-      setAmount(0);
-      setIsAdding(false);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'expenses');
-    }
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          onClick={() => setIsAdding(true)}
-          className="bg-red-600 hover:bg-red-700 text-white font-black py-3 px-6 rounded-2xl transition-all shadow-md shadow-red-200 flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>إضافة مصاريف جديدة</span>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-3xl border border-sky-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead>
-              <tr className="bg-red-50/70 border-b border-slate-100 text-red-900 font-bold">
-                <th className="p-4">الوصف والبيان</th>
-                <th className="p-4">المضيف / المسؤول</th>
-                <th className="p-4">التاريخ</th>
-                <th className="p-4">المبلغ</th>
-                <th className="p-4">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {expenses.map(expense => {
-                const adderName = users?.find(u => u.uid === expense.addedBy || u.uid === expense.createdBy)?.displayName || profile.displayName;
-                return (
-                  <tr key={expense.id} className="hover:bg-slate-50">
-                    <td className="p-4 font-bold text-slate-900">{expense.description}</td>
-                    <td className="p-4 text-slate-600 font-medium">{adderName}</td>
-                    <td className="p-4 text-slate-500">{formatDate(expense.date)}</td>
-                    <td className="p-4 font-black text-red-600">{formatCurrency(expense.amount)}</td>
-                    <td className="p-4">
-                      <button
-                        onClick={async () => {
-                          if (confirm('هل أنت متأكد من حذف هذه المصاريف؟')) {
-                            try {
-                              await deleteDoc(doc(db, 'expenses', expense.id));
-                            } catch (err) {
-                              handleFirestoreError(err, OperationType.DELETE, 'expenses');
-                            }
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {expenses.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-400">لا توجد مصاريف مسجلة</td>
+                  <td colSpan={6} className="px-6 py-12 text-center text-stone-400">لا توجد عمليات سقي مسجلة</td>
                 </tr>
               )}
             </tbody>
@@ -1794,57 +1705,225 @@ function ExpensesView({
 
       {/* Add Modal */}
       {isAdding && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 text-right space-y-4"
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-lg font-bold text-slate-900">إضافة مصاريف وتكاليف</h3>
-              <button onClick={() => setIsAdding(false)} className="p-1 hover:bg-slate-100 rounded-full text-slate-500">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
+            <h3 className="text-2xl font-bold text-stone-900 mb-6">تسجيل سقي جديد</h3>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">وصف المصاريف *</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-bold text-stone-700 mb-2">اختر المشترك</label>
+                <select 
                   required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="مثال: شراء صمام مياه أو إصلاح أنبوب"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-red-500 outline-none"
-                />
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={selectedSubId}
+                  onChange={(e) => setSelectedSubId(e.target.value)}
+                >
+                  <option value="">-- اختر مشترك --</option>
+                  {subscribers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">المبلغ (درهم) *</label>
-                <input
-                  type="number"
+                <label className="block text-sm font-bold text-stone-700 mb-2">عدد الساعات</label>
+                <input 
                   required
-                  value={amount || ''}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  placeholder="0.00"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-black text-red-600 focus:ring-2 focus:ring-red-500 outline-none"
+                  type="number" 
+                  min="0.5"
+                  step="0.5"
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={hours}
+                  onChange={(e) => setHours(Number(e.target.value))}
                 />
               </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
+              <div className="bg-stone-50 p-4 rounded-2xl space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-stone-500">ثمن الساعة:</span>
+                  <span className="font-bold">{formatCurrency(IRRIGATION_RATE)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-stone-500">أجرة العامل ({hours} س):</span>
+                  <span className="font-bold">{formatCurrency(hours * WORKER_WAGE_PER_HOUR)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-stone-200">
+                  <span className="text-emerald-700 font-bold">المجموع للأداء:</span>
+                  <span className="text-emerald-700 font-bold text-xl">{formatCurrency(hours * IRRIGATION_RATE)}</span>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all"
+                >
+                  تأكيد الأداء والطباعة
+                </button>
+                <button 
                   type="button"
                   onClick={() => setIsAdding(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
                 >
                   إلغاء
                 </button>
-                <button
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Hidden Print Component */}
+      <div className="hidden">
+        {selectedSession && <ReceiptPrint ref={printRef} data={selectedSession} type="irrigation" />}
+      </div>
+    </motion.div>
+  );
+}
+
+function ExpensesView({ expenses, profile, users }: { expenses: Expense[], profile: UserProfile, users?: UserProfile[] }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState(0);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!description || amount <= 0) return;
+    try {
+      await addDoc(collection(db, 'expenses'), {
+        description,
+        amount,
+        date: new Date().toISOString(),
+        addedBy: profile.uid,
+        createdBy: profile.uid
+      });
+      
+      setDescription('');
+      setAmount(0);
+      setIsAdding(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'expenses');
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="space-y-6"
+    >
+      <div className="flex justify-end">
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-2xl transition-all flex items-center gap-2 shadow-lg shadow-red-100"
+        >
+          <Plus className="w-5 h-5" />
+          إضافة مصاريف
+        </button>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead>
+              <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-600">الوصف</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المضيف</th>
+                <th className="px-6 py-4 font-bold text-stone-600">التاريخ</th>
+                <th className="px-6 py-4 font-bold text-stone-600">المبلغ</th>
+                <th className="px-6 py-4 font-bold text-stone-600">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {expenses.map(expense => {
+                const adderName = users?.find(u => u.uid === expense.addedBy || u.uid === expense.createdBy)?.displayName || profile.displayName;
+                return (
+                  <tr key={expense.id} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-stone-900">{expense.description}</td>
+                    <td className="px-6 py-4 text-xs font-semibold text-stone-700">{adderName}</td>
+                    <td className="px-6 py-4 text-stone-500 text-sm">{formatDate(expense.date)}</td>
+                    <td className="px-6 py-4 font-bold text-red-600">{formatCurrency(expense.amount)}</td>
+                    <td className="px-6 py-4">
+                      <button 
+                        onClick={async () => {
+                          if (confirm('هل أنت متأكد من حذف هذه المصاريف؟ سيتم إضافة المبلغ لرصيد المستخدم.')) {
+                            try {
+                              await deleteDoc(doc(db, 'expenses', expense.id));
+                              const userRef = doc(db, 'users', expense.addedBy);
+                              const userDoc = await getDoc(userRef);
+                              if (userDoc.exists()) {
+                                 await updateDoc(userRef, {
+                                   balance: (userDoc.data().balance || 0) + expense.amount
+                                 });
+                              }
+                            } catch (err) {
+                              handleFirestoreError(err, OperationType.DELETE, 'expenses');
+                            }
+                          }
+                        }}
+                        className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+                        title="حذف"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {expenses.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-stone-400">لا توجد مصاريف مسجلة</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add Modal */}
+      {isAdding && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+          >
+            <h3 className="text-2xl font-bold text-stone-900 mb-6">إضافة مصاريف جديدة</h3>
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">وصف المصاريف</label>
+                <input 
+                  autoFocus
+                  required
+                  type="text" 
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-stone-700 mb-2">المبلغ</label>
+                <input 
+                  required
+                  type="number" 
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none"
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button 
                   type="submit"
-                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl shadow-md shadow-red-200"
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all"
                 >
                   تأكيد الإضافة
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="flex-1 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold py-3 rounded-xl transition-all"
+                >
+                  إلغاء
                 </button>
               </div>
             </form>
@@ -1855,20 +1934,7 @@ function ExpensesView({
   );
 }
 
-// ==========================================
-// 6. Reports View (With RawBT Report Summary)
-// ==========================================
-function ReportsView({ 
-  sessions, 
-  expenses, 
-  transfers, 
-  subscribers 
-}: { 
-  sessions: IrrigationSession[]; 
-  expenses: Expense[]; 
-  transfers: Transfer[]; 
-  subscribers: Subscriber[]; 
-}) {
+function ReportsView({ sessions, expenses, transfers, subscribers }: { sessions: IrrigationSession[], expenses: Expense[], transfers: Transfer[], subscribers: Subscriber[] }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const reportPrintRef = useRef<HTMLDivElement>(null);
@@ -1891,7 +1957,7 @@ function ReportsView({
     if (endDate && date > new Date(endDate)) return false;
     return true;
   });
-
+  
   const filteredSubscriptions = subscribers.filter(s => {
     const date = new Date(s.subscriptionDate);
     if (startDate && date < new Date(startDate)) return false;
@@ -1901,302 +1967,863 @@ function ReportsView({
 
   const totalIrrigation = filteredSessions.reduce((acc, s) => acc + s.totalAmount, 0);
   const totalWorkerWagesConfirmed = filteredSessions.reduce((acc, s) => acc + (s.workerWagePaid ? s.workerWage : 0), 0);
-  const totalSubscriptions = filteredSubscriptions.reduce((acc, s) => acc + (s.subscriptionFeePaid || SUBSCRIPTION_FEE), 0);
+  const totalSubscriptions = filteredSubscriptions.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
   const netIrrigation = totalIrrigation - totalWorkerWagesConfirmed;
   const totalIncome = netIrrigation + totalSubscriptions;
   const totalExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0) + totalWorkerWagesConfirmed;
   const netBalance = totalIncome - totalExpenses;
 
-  const handleRawbtReportPrint = () => {
-    const reportText = formatReportRawBT(startDate, endDate, netIrrigation, totalSubscriptions, totalIncome, totalExpenses, netBalance);
-    printViaRawBT(reportText);
-  };
-
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-      {/* Date Filter Bar */}
-      <div className="bg-white p-5 rounded-3xl border border-sky-100 shadow-sm flex flex-wrap items-end gap-3">
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="space-y-8"
+    >
+      <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-wrap items-end gap-4">
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">من تاريخ</label>
-          <input
-            type="date"
+          <label className="block text-sm font-bold text-stone-700 mb-2">من تاريخ</label>
+          <input 
+            type="date" 
+            className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-[#0088cc]"
           />
         </div>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">إلى تاريخ</label>
-          <input
-            type="date"
+          <label className="block text-sm font-bold text-stone-700 mb-2">إلى تاريخ</label>
+          <input 
+            type="date" 
+            className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-[#0088cc]"
           />
         </div>
-
-        <button
-          onClick={() => { setStartDate(''); setEndDate(''); }}
-          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl"
+        <button 
+          onClick={() => {setStartDate(''); setEndDate('');}}
+          className="px-6 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold rounded-xl transition-all"
         >
-          إعادة ضبط
+          إعادة تعيين
         </button>
-
-        {/* RawBT Report Print */}
-        <button
-          onClick={handleRawbtReportPrint}
-          className="px-4 py-2 bg-sky-50 hover:bg-sky-100 text-[#0077b6] text-xs font-bold rounded-xl border border-sky-200 flex items-center gap-1.5"
-          title="طباعة تقرير حراري عبر RawBT"
-        >
-          <Smartphone className="w-4 h-4" />
-          <span>تقرير RawBT (Sunmi)</span>
-        </button>
-
-        {/* Standard Print */}
-        <button
+        <button 
           onClick={() => handlePrintReport()}
-          className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b6] text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5"
+          className="bg-stone-800 hover:bg-stone-900 text-white font-bold py-2 px-6 rounded-xl transition-all flex items-center gap-2 shadow-sm"
         >
-          <Printer className="w-4 h-4" />
-          <span>طباعة تقرير كامل (A4)</span>
+          <Printer className="w-5 h-5" />
+          طباعة التقرير
+        </button>
+        <button 
+          onClick={() => downloadCSV([
+            { label: 'مداخيل السقي (الصافي)', value: formatCurrency(netIrrigation) },
+            { label: 'أجور العمال المؤداة', value: formatCurrency(totalWorkerWagesConfirmed) },
+            { label: 'إجمالي المصاريف', value: formatCurrency(totalExpenses) },
+            { label: 'الرصيد المتبقي', value: formatCurrency(netBalance) }
+          ], [
+            { header: 'البيان', accessor: (r) => r.label },
+            { header: 'القيمة', accessor: (r) => r.value }
+          ], 'تقرير-مالي')}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded-xl transition-all flex items-center gap-2"
+        >
+          <Download className="w-5 h-5" />
+          تصدير التقرير
         </button>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">مداخيل السقي (الصافي)</p>
-          <p className="text-xl font-black text-[#0088cc]">{formatCurrency(netIrrigation)}</p>
+      {/* Hidden printable report */}
+      <div className="hidden">
+        <ReportPrint 
+          ref={reportPrintRef} 
+          startDate={startDate} 
+          endDate={endDate} 
+          netIrrigation={netIrrigation} 
+          totalSubscriptions={totalSubscriptions} 
+          totalIncome={totalIncome} 
+          totalWorkerWagesConfirmed={totalWorkerWagesConfirmed} 
+          expensesList={filteredExpenses} 
+          totalExpenses={totalExpenses} 
+          netBalance={netBalance} 
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100">
+          <p className="text-emerald-700 font-medium mb-1">مداخيل السقي (الصافي)</p>
+          <p className="text-2xl font-bold text-emerald-800">{formatCurrency(netIrrigation)}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">مداخيل الاشتراكات</p>
-          <p className="text-xl font-black text-slate-800">{formatCurrency(totalSubscriptions)}</p>
+        <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+          <p className="text-blue-700 font-medium mb-1">أجور العمال المؤداة</p>
+          <p className="text-2xl font-bold text-blue-800">{formatCurrency(totalWorkerWagesConfirmed)}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">إجمالي المصاريف والأجور</p>
-          <p className="text-xl font-black text-red-600">{formatCurrency(totalExpenses)}</p>
+        <div className="bg-red-50 p-6 rounded-3xl border border-red-100">
+          <p className="text-red-700 font-medium mb-1">إجمالي المصاريف</p>
+          <p className="text-2xl font-bold text-red-800">{formatCurrency(totalExpenses)}</p>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">الرصيد الصافي المتبقي</p>
-          <p className={`text-xl font-black ${netBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {formatCurrency(netBalance)}
-          </p>
+        <div className={`${netBalance >= 0 ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'} p-6 rounded-3xl border`}>
+          <p className={`${netBalance >= 0 ? 'text-blue-700' : 'text-amber-700'} font-medium mb-1`}>الرصيد المتبقي</p>
+          <p className={`text-2xl font-bold ${netBalance >= 0 ? 'text-blue-800' : 'text-amber-800'}`}>{formatCurrency(netBalance)}</p>
         </div>
       </div>
 
-      {/* Hidden Printable Report */}
-      <div className="hidden">
-        <ReportPrint
-          ref={reportPrintRef}
-          startDate={startDate}
-          endDate={endDate}
-          netIrrigation={netIrrigation}
-          totalSubscriptions={totalSubscriptions}
-          totalIncome={totalIncome}
-          totalWorkerWagesConfirmed={totalWorkerWagesConfirmed}
-          expensesList={filteredExpenses}
-          totalExpenses={totalExpenses}
-          netBalance={netBalance}
-        />
+      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+        <h3 className="text-xl font-bold text-stone-900 mb-8 border-b border-stone-100 pb-4">تفاصيل التقرير المالي</h3>
+        
+        <div className="space-y-6">
+          <section>
+            <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+              المداخيل
+            </h4>
+            <div className="space-y-2">
+              <div className="flex justify-between py-2 border-b border-stone-50">
+                <span>مداخيل ساعات السقي الصافية</span>
+                <span className="font-bold">{formatCurrency(netIrrigation)}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-stone-50">
+                <span>مداخيل الاشتراكات</span>
+                <span className="font-bold">{formatCurrency(totalSubscriptions)}</span>
+              </div>
+              <div className="flex justify-between py-2 font-bold text-emerald-700">
+                <span>إجمالي المداخيل</span>
+                <span>{formatCurrency(totalIncome)}</span>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h4 className="font-bold text-stone-700 mb-4 flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              المصاريف
+            </h4>
+            <div className="space-y-2">
+              {filteredExpenses.map(e => (
+                <div key={e.id} className="flex justify-between py-2 border-b border-stone-50 text-sm">
+                  <span>{e.description}</span>
+                  <span className="font-medium">{formatCurrency(e.amount)}</span>
+                </div>
+              ))}
+              {filteredExpenses.length === 0 && <p className="text-stone-400 text-sm italic">لا توجد مصاريف في هذه الفترة</p>}
+              <div className="flex justify-between py-2 font-bold text-red-700 pt-4">
+                <span>إجمالي المصاريف</span>
+                <span>{formatCurrency(totalExpenses)}</span>
+              </div>
+            </div>
+          </section>
+
+          <div className="mt-12 pt-6 border-t-2 border-stone-100 flex justify-between items-center">
+            <span className="text-xl font-bold text-stone-900">النتيجة المالية النهائية:</span>
+            <span className={`text-3xl font-black ${netBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {formatCurrency(netBalance)}
+            </span>
+          </div>
+        </div>
       </div>
     </motion.div>
   );
 }
 
-// ==========================================
-// 7. Transfers View
-// ==========================================
-function TransfersView({ 
-  users, 
-  transfers, 
-  profile 
-}: { 
-  users: UserProfile[]; 
-  transfers: Transfer[]; 
-  profile: UserProfile; 
-}) {
-  const [amount, setAmount] = useState<number>(0);
-  const [toUid, setToUid] = useState('');
 
-  const handleTransfer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!toUid || amount <= 0 || amount > (profile.balance || 0)) return;
+const ALL_APP_SECTIONS = [
+  { id: 'dashboard', name: 'لوحة التحكم', description: 'الإحصائيات العامة والرصيد' },
+  { id: 'subscribers', name: 'إدارة المشتركين', description: 'إضافة وتعديل بيانات المشتركين' },
+  { id: 'irrigation', name: 'حصص السقي', description: 'استيفاء حصص السقي وطباعة الوصل' },
+  { id: 'expenses', name: 'المصاريف', description: 'تسجيل مصاريف وتكاليف الجمعية' },
+  { id: 'reports', name: 'التقارير المالية', description: 'متابعة المداخيل والحسابات' },
+  { id: 'transfers', name: 'تحويل الرصيد', description: 'إرسال وتحويل المبالغ بين الأعضاء' },
+  { id: 'activity', name: 'سجل العمليات', description: 'تتبع كافة أنشطة وعمليات التطبيق' },
+  { id: 'balance', name: 'الرصيد', description: 'رصيد الجمعية المالي' },
+  { id: 'financial', name: 'التدبير المالي', description: 'مجموع المداخيل والمصاريف' },
+];
 
+const UserRowItem: React.FC<{ user: UserProfile, currentUser?: UserProfile, isAmin?: boolean, showConfirm?: (title: string, message: string, onConfirm: () => void) => void }> = ({ user, currentUser, isAmin = true, showConfirm }) => {
+  const [displayName, setDisplayName] = useState(user.displayName || '');
+  const [role, setRole] = useState<UserRole>(user.role || 'mukallaf');
+  const [balance, setBalance] = useState(user.balance || 0);
+  const [signatureUrl, setSignatureUrl] = useState(user.signatureUrl || '');
+  const [allowedTabs, setAllowedTabs] = useState<string[]>(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSigPadOpen, setIsSigPadOpen] = useState(false);
+
+  const isSelf = currentUser?.uid === user.uid;
+  const canEditProfile = isAmin || isSelf;
+  const canEditRoleAndTabs = isAmin;
+
+  useEffect(() => {
+    setDisplayName(user.displayName || '');
+    setRole(user.role || 'mukallaf');
+    setBalance(user.balance || 0);
+    setSignatureUrl(user.signatureUrl || '');
+    setAllowedTabs(user.allowedTabs || ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  }, [user.uid, user.displayName, user.role, user.balance, user.signatureUrl, JSON.stringify(user.allowedTabs)]);
+
+  const toggleTab = (tabId: string) => {
+    if (!canEditRoleAndTabs) return;
+    setAllowedTabs(prev => 
+      prev.includes(tabId) ? prev.filter(t => t !== tabId) : [...prev, tabId]
+    );
+  };
+
+  const selectAll = () => {
+    if (!canEditRoleAndTabs) return;
+    setAllowedTabs(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  };
+
+  const deselectAll = () => {
+    if (!canEditRoleAndTabs) return;
+    setAllowedTabs([]);
+  };
+
+  const handleUpdate = async () => {
+    if (!displayName.trim()) return;
+    setSaving(true);
     try {
-      await addDoc(collection(db, 'transfers'), {
-        fromUid: profile.uid,
-        toUid,
-        amount,
-        date: new Date().toISOString(),
-        createdBy: profile.uid
+      await updateDoc(doc(db, 'users', user.uid), {
+        displayName: displayName.trim(),
+        role: role,
+        balance: balance,
+        signatureUrl: signatureUrl.trim(),
+        allowedTabs: role === 'amin' ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] : allowedTabs
       });
-
-      await updateDoc(doc(db, 'users', profile.uid), {
-        balance: (profile.balance || 0) - amount
-      });
-
-      const receiver = users.find(u => u.uid === toUid);
-      if (receiver) {
-        await updateDoc(doc(db, 'users', toUid), {
-          balance: (receiver.balance || 0) + amount
-        });
-      }
-
-      setAmount(0);
-      setToUid('');
-      alert('تم تحويل المبلغ بنجاح!');
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'transfers');
+      console.error('Failed to update user profile:', err);
+      alert('حدث خطأ أثناء تحديث بيانات المستخدم');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-        <h3 className="text-lg font-black text-slate-900">تحويل رصيد جديد</h3>
-        <div className="bg-sky-50 p-4 rounded-2xl">
-          <p className="text-xs text-slate-500 mb-1">رصيدك المتاح للتحويل:</p>
-          <p className="text-2xl font-black text-[#0088cc]">{formatCurrency(profile.balance || 0)}</p>
-        </div>
-
-        <form onSubmit={handleTransfer} className="space-y-4">
+    <div className="bg-stone-50/90 p-6 rounded-2xl border border-stone-200 space-y-4">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">تحويل إلى *</label>
-            <select
-              required
-              value={toUid}
-              onChange={(e) => setToUid(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-[#0088cc]"
-            >
-              <option value="">-- اختر المستلم --</option>
-              {users.filter(u => u.uid !== profile.uid).map(u => (
-                <option key={u.uid} value={u.uid}>{u.displayName} ({u.role === 'amin' ? 'أمين المال' : 'مكلف'})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">المبلغ المراد تحويله (درهم) *</label>
-            <input
-              type="number"
-              required
-              max={profile.balance || 0}
-              value={amount || ''}
-              onChange={(e) => setAmount(Number(e.target.value))}
-              placeholder="0.00"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-black text-[#0088cc] outline-none focus:ring-2 focus:ring-[#0088cc]"
+            <label className="block text-xs font-bold text-stone-600 mb-1">الاسم الكامل في التطبيق</label>
+            <input 
+              type="text" 
+              disabled={!canEditProfile}
+              value={displayName} 
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-stone-900 w-full disabled:bg-stone-100"
+              placeholder="اسم المستخدم"
             />
           </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">البريد الإلكتروني</label>
+            <input 
+              disabled
+              type="text" 
+              value={user.email} 
+              className="px-3 py-2 bg-stone-100 border border-stone-200 rounded-xl font-mono text-xs text-stone-500 w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">الرصيد الحالي</label>
+            <input 
+              type="number" 
+              disabled={!canEditRoleAndTabs}
+              value={balance} 
+              onChange={(e) => setBalance(Number(e.target.value))}
+              className="px-3 py-2 bg-white border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 font-bold text-emerald-600 w-full disabled:bg-stone-100"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-stone-600 mb-1">صورة التوقيع (للطباعة في الوصل)</label>
+            <div className="flex items-center gap-2">
+              <input 
+                type="text" 
+                disabled={!canEditProfile}
+                value={signatureUrl} 
+                onChange={(e) => setSignatureUrl(e.target.value)}
+                className="px-3 py-2 bg-white border border-stone-300 rounded-xl font-mono text-xs dir-ltr text-stone-800 w-full disabled:bg-stone-100"
+                placeholder="رابط أو اختر صورة"
+              />
+              {canEditProfile && (
+                <>
+                  <label className="cursor-pointer px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1 transition-colors">
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>رفع</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            if (event.target?.result) {
+                              setSignatureUrl(event.target.result as string);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsSigPadOpen(true)}
+                    className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1 transition-colors"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-stone-700" />
+                    <span>رسم</span>
+                  </button>
+                </>
+              )}
+              {signatureUrl && (
+                <img 
+                  src={signatureUrl} 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  alt="توقيع" 
+                  className="w-9 h-9 object-contain border border-stone-300 rounded-xl bg-white shrink-0 p-0.5 shadow-2xs" 
+                />
+              )}
+            </div>
+          </div>
+        </div>
 
-          <button
-            type="submit"
-            disabled={amount <= 0 || amount > (profile.balance || 0)}
-            className="w-full py-3 bg-[#0088cc] hover:bg-[#0077b6] text-white font-black text-xs rounded-xl shadow-md shadow-sky-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            <Send className="w-4 h-4" />
-            <span>تأكيد التحويل</span>
-          </button>
-        </form>
+        <SignaturePadModal
+          isOpen={isSigPadOpen}
+          onClose={() => setIsSigPadOpen(false)}
+          onSave={(dataUrl) => setSignatureUrl(dataUrl)}
+          title={`رسم توقيع ${displayName || user.email}`}
+        />
+
+        <div className="flex items-center gap-2 shrink-0">
+          {canEditProfile && (
+            <button 
+              onClick={handleUpdate}
+              disabled={saving}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 shrink-0 ${
+                savedSuccess 
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer'
+              }`}
+            >
+              {saving ? 'جاري الحفظ...' : savedSuccess ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  تم الحفظ
+                </>
+              ) : (
+                'حفظ التوقيع والبيانات'
+              )}
+            </button>
+          )}
+
+          {isAmin && !isSelf && user.email?.toLowerCase() !== 'amriahassan@gmail.com' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (showConfirm) {
+                  showConfirm(
+                    'حذف الحساب',
+                    `هل أنت تأكد من حذف المستخدم "${displayName || user.email}" بشكل نهائي؟ لن يستطيع هذا المستخدم تسجيل الدخول للتطبيق بعد ذلك.`,
+                    async () => {
+                      try {
+                        await deleteDoc(doc(db, 'users', user.uid));
+                      } catch (err) {
+                        console.error('Failed to delete user:', err);
+                        alert('حدث خطأ أثناء حذف الحساب.');
+                      }
+                    }
+                  );
+                }
+              }}
+              className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold rounded-xl border border-red-200 flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="حذف هذا المستخدم"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>حذف</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-        <h3 className="text-lg font-black text-slate-900">سجل التحويلات بين الأعضاء</h3>
-        <div className="space-y-2 max-h-[500px] overflow-y-auto">
-          {transfers.map(t => {
-            const fromUser = users.find(u => u.uid === t.fromUid);
-            const toUser = users.find(u => u.uid === t.toUid);
-            const isSender = t.fromUid === profile.uid;
-            return (
-              <div key={t.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isSender ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                    <ArrowRightLeft className="w-4 h-4" />
+      {/* Section Permissions Selector */}
+      <div className="pt-3 border-t border-stone-200">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-stone-500" />
+            الأقسام المسموح بظهورها لهذا المستخدم في القائمة:
+          </span>
+          {role !== 'amin' && canEditRoleAndTabs && (
+            <div className="flex items-center gap-2">
+              <button 
+                type="button" 
+                onClick={selectAll} 
+                className="text-[11px] font-bold text-emerald-700 hover:underline"
+              >
+                تحديد الكل
+              </button>
+              <span className="text-stone-300">|</span>
+              <button 
+                type="button" 
+                onClick={deselectAll} 
+                className="text-[11px] font-bold text-stone-500 hover:underline"
+              >
+                إلغاء الكل
+              </button>
+            </div>
+          )}
+        </div>
+
+        {role === 'amin' ? (
+          <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800">
+            أمين المال يمتلك صلاحيات شاملة لكافة أقسام التطبيق والإعدادات.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {ALL_APP_SECTIONS.map(section => {
+              const isChecked = allowedTabs.includes(section.id);
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  disabled={!canEditRoleAndTabs}
+                  onClick={() => toggleTab(section.id)}
+                  className={`p-2.5 rounded-xl border text-right transition-all flex items-center gap-2 ${
+                    isChecked
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
+                      : 'bg-white border-stone-200 text-stone-400 font-medium hover:border-stone-300'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                    isChecked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300 bg-stone-50'
+                  }`}>
+                    {isChecked && <CheckCircle className="w-3.5 h-3.5" />}
                   </div>
-                  <div>
-                    <p className="font-bold text-xs text-slate-900">
-                      {isSender ? `تحويل إلى: ${toUser?.displayName || 'مستخدم'}` : `استلام من: ${fromUser?.displayName || 'مستخدم'}`}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{formatDate(t.date)}</p>
+                  <span className="text-xs truncate">{section.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UserManagementView({ users, profile, showConfirm }: { users: UserProfile[], profile?: UserProfile, showConfirm?: (title: string, message: string, onConfirm: () => void) => void }) {
+  const isAmin = profile?.role === 'amin';
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newDisplayName, setNewDisplayName] = useState('');
+  const [newRole, setNewRole] = useState<UserRole>('mukallaf');
+  const [newSignatureUrl, setNewSignatureUrl] = useState('');
+  const [newAllowedTabs, setNewAllowedTabs] = useState<string[]>(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
+  const [isAddSigPadOpen, setIsAddSigPadOpen] = useState(false);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError('');
+    setAddSuccess('');
+
+    if (!newEmail.trim() || !newPassword || !newDisplayName.trim()) {
+      setAddError('يرجى ملء جميع الحقول المطلوبة (الاسم الكامل، البريد الإلكتروني، وكلمة المرور)');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setAddError('كلمة المرور يجب أن تتكون من 6 أحرف على الأقل');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Create account in Firebase Auth using secondary app instance
+      const newUser = await createNewUserAccount(newEmail.trim(), newPassword);
+
+      // 2. Write profile to Firestore
+      const newProfile: UserProfile = {
+        uid: newUser.uid,
+        email: newEmail.trim().toLowerCase(),
+        displayName: newDisplayName.trim(),
+        role: newRole,
+        signatureUrl: newSignatureUrl.trim(),
+        allowedTabs: newRole === 'amin' 
+          ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity'] 
+          : newAllowedTabs,
+        balance: 0
+      };
+
+      await setDoc(doc(db, 'users', newUser.uid), newProfile);
+
+      setAddSuccess(`تمت إضافة المستخدم "${newDisplayName.trim()}" بنجاح!`);
+      setNewEmail('');
+      setNewPassword('');
+      setNewDisplayName('');
+      setNewRole('mukallaf');
+      setNewSignatureUrl('');
+      setNewAllowedTabs(['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity']);
+      
+      setTimeout(() => {
+        setIsAddModalOpen(false);
+        setAddSuccess('');
+      }, 1500);
+    } catch (error: any) {
+      console.error('Error creating user account:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        setAddError('هذا البريد الإلكتروني مستخدم بالفعل لمستخدم آخر.');
+      } else if (error.code === 'auth/invalid-email') {
+        setAddError('البريد الإلكتروني غير صحيح.');
+      } else if (error.code === 'auth/weak-password') {
+        setAddError('كلمة المرور ضعيفة جداً (6 أحرف على الأقل).');
+      } else {
+        setAddError('حدث خطأ أثناء إنشاء الحساب. يرجى التأكد من البيانات.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-stone-100 pb-4">
+        <div>
+          <h3 className="text-xl font-bold text-stone-900 flex items-center gap-2">
+            إدارة المستخدمين والأقسام والصلاحيات والتواقيع
+            <span className="text-xs font-bold px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full">إدارة الحسابات</span>
+          </h3>
+          <p className="text-sm text-stone-500 mt-1">يمكنك إضافة أعضاء ومكلفين جدد، إلغاء أوتحكم في الحسابات، وتحديد صلاحيات كل مستخدم بالدقة.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="px-4 py-2 bg-stone-50 border border-stone-200 rounded-2xl text-xs font-bold text-stone-700 shrink-0">
+            إجمالي المستخدمين: {users.length}
+          </div>
+          {isAmin && (
+            <button
+              onClick={() => {
+                setAddError('');
+                setAddSuccess('');
+                setIsAddModalOpen(true);
+              }}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl transition-all shadow-md flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة مستخدم جديد</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {users.map(u => (
+          <UserRowItem key={u.uid} user={u} currentUser={profile} isAmin={isAmin} showConfirm={showConfirm} />
+        ))}
+        {users.length === 0 && (
+          <p className="p-8 text-center text-stone-400 bg-stone-50 rounded-2xl border border-stone-200">لا يوجد مستخدمون مسجلون بعد</p>
+        )}
+      </div>
+
+      {/* Modal for adding new user */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-stone-200 max-h-[90vh] overflow-y-auto text-right" dir="rtl">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+                <UserCircle className="w-5 h-5 text-emerald-600" />
+                إضافة مستخدم جديد للحساب السرّي
+              </h3>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 hover:bg-stone-100 rounded-full text-stone-400 hover:text-stone-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {addError && (
+              <div className="p-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-xs font-bold mb-4">
+                {addError}
+              </div>
+            )}
+
+            {addSuccess && (
+              <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold mb-4 flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{addSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">الاسم الكامل للمستخدم *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-bold"
+                  placeholder="مثال: محمد العباسي"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">البريد الإلكتروني *</label>
+                  <input 
+                    type="email" 
+                    required
+                    dir="ltr"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs font-mono"
+                    placeholder="user@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">كلمة المرور *</label>
+                  <input 
+                    type="password" 
+                    required
+                    dir="ltr"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs font-mono"
+                    placeholder="•••••••• (6 أحرف على الأقل)"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">الصفة / الدور في الجمعية</label>
+                <select 
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as UserRole)}
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-bold text-stone-800"
+                >
+                  <option value="mukallaf">مكلف بالتحصيل والسقي</option>
+                  <option value="rais">رئيس الجمعية (الاطلاع والمراقبة)</option>
+                  <option value="amin">أمين المال (المسؤول الإداري والمالي)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1">توقيع المستخدم (اختياري)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={newSignatureUrl}
+                    onChange={(e) => setNewSignatureUrl(e.target.value)}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono text-xs dir-ltr"
+                    placeholder="رابط التوقيع أو اختر صورة"
+                  />
+                  <label className="cursor-pointer px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1">
+                    <Upload className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>رفع</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            if (ev.target?.result) setNewSignatureUrl(ev.target.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddSigPadOpen(true)}
+                    className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1"
+                  >
+                    <PenTool className="w-3.5 h-3.5 text-stone-700" />
+                    <span>رسم</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Signature Modal inside add form */}
+              <SignaturePadModal
+                isOpen={isAddSigPadOpen}
+                onClose={() => setIsAddSigPadOpen(false)}
+                onSave={(dataUrl) => setNewSignatureUrl(dataUrl)}
+                title={`رسم توقيع ${newDisplayName || 'المستخدم الجديد'}`}
+              />
+
+              {/* Section Permissions Selection */}
+              {newRole !== 'amin' && (
+                <div className="pt-2 border-t border-stone-100">
+                  <label className="block text-xs font-bold text-stone-700 mb-2">الأقسام المسموح له بفتحها:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ALL_APP_SECTIONS.map(s => {
+                      const isChecked = newAllowedTabs.includes(s.id);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setNewAllowedTabs(prev => 
+                              prev.includes(s.id) ? prev.filter(t => t !== s.id) : [...prev, s.id]
+                            );
+                          }}
+                          className={`p-2 rounded-xl border text-right text-xs transition-all flex items-center gap-2 ${
+                            isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-400'
+                          }`}
+                        >
+                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${
+                            isChecked ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-300'
+                          }`}>
+                            {isChecked && <CheckCircle className="w-3 h-3" />}
+                          </div>
+                          <span className="truncate">{s.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-                <p className={`font-black text-sm ${isSender ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {isSender ? '-' : '+'}{formatCurrency(t.amount)}
-                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'جاري الإنشاء...' : 'حفظ وإنشاء الحساب'}
+                </button>
               </div>
-            );
-          })}
-          {transfers.length === 0 && <p className="p-8 text-center text-slate-400 text-xs">لا توجد تحويلات مسجلة</p>}
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-2 text-xs text-stone-600">
+        <p className="font-bold text-stone-800 text-sm mb-1">دليل الأدوار والصلاحيات والتوقيع:</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-emerald-800 block mb-1">أمين المال (المسؤول)</span>
+            المسؤول المالي والإداري عن الجمعية، يمتلك الوصول لكافة الأقسام وإمكانية تحديد أسماء وصلاحيات ورابط توقيع الأعضاء وإضافة أو حذف الحسابات.
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-blue-800 block mb-1">رئيس الجمعية</span>
+            يطلع على العمليات والتقارير في الأقسام المحددة له من طرف أمين المال.
+          </div>
+          <div className="p-3 bg-white rounded-xl border border-stone-200">
+            <span className="font-bold text-stone-800 block mb-1">مكلف بالتحصيل والسقي</span>
+            يستوفي أجور السقي والاشتراكات وينفذ العمليات في الأقسام المتاحة له فقط.
+          </div>
         </div>
       </div>
     </motion.div>
   );
 }
 
-// ==========================================
-// 8. Association Balance & Financial View
-// ==========================================
-function AssociationBalanceView({ 
-  users, 
-  sessions, 
-  expenses, 
-  subscribers 
-}: { 
-  users: UserProfile[]; 
-  sessions: IrrigationSession[]; 
-  expenses: Expense[]; 
-  subscribers: Subscriber[]; 
-}) {
+function ActivityLogView({ users, subscribers, sessions, expenses, transfers }: { users: UserProfile[], subscribers: Subscriber[], sessions: IrrigationSession[], expenses: Expense[], transfers: Transfer[] }) {
+  const activities = [
+    ...subscribers.map(s => ({ ...s, type: 'مشترك جديد', details: `${s.name} (${s.receiptNumber || `SUB-${s.id.slice(-6).toUpperCase()}`})`, date: s.subscriptionDate })),
+    ...sessions.map(s => ({ ...s, type: 'عملية سقي', details: `${s.subscriberName} - ${s.hours} ساعة (${s.receiptNumber || `IRR-${s.id.slice(-6).toUpperCase()}`})`, date: s.date })),
+    ...expenses.map(e => ({ ...e, type: 'مصاريف', details: `${e.description} (${formatCurrency(e.amount)})`, date: e.date })),
+    ...transfers.map(t => ({ ...t, type: 'تحويل رصيد', details: `مبلغ ${formatCurrency(t.amount)}`, date: t.date })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
+
+  return (
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+      <h3 className="text-xl font-bold text-stone-900 mb-6">سجل العمليات</h3>
+      <div className="space-y-4">
+        {activities.map((a: any, i) => {
+          const user = users.find(u => u.uid === a.createdBy);
+          return (
+            <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-100 gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-stone-900">{a.type}</p>
+                  <span className="text-xs font-semibold text-stone-600 bg-stone-200/60 px-2.5 py-0.5 rounded-lg">{a.details}</span>
+                </div>
+                <p className="text-xs text-stone-400 mt-1">{formatDate(a.date)}</p>
+              </div>
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100 self-start sm:self-auto">
+                بواسطة: {user?.displayName || 'مستخدم غير معروف'}
+              </span>
+            </div>
+          );
+        })}
+        {activities.length === 0 && <p className="text-center text-stone-400 py-12">لا توجد عمليات مسجلة</p>}
+      </div>
+    </motion.div>
+  );
+}
+
+function AssociationBalanceView({ users, sessions, expenses, subscribers }: { users: UserProfile[], sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[] }) {
   const totalBalance = users.reduce((acc, u) => acc + (u.balance || 0), 0);
-  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + (s.subscriptionFeePaid || SUBSCRIPTION_FEE), 0);
+  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0);
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="bg-gradient-to-r from-[#105a8b] via-[#0077b6] to-[#0284c7] text-white p-8 rounded-3xl shadow-lg">
-        <p className="text-xs font-bold text-sky-100 mb-1">الرصيد الكلي للجمعية (مجموع أرصدة المستخدمين)</p>
-        <p className="text-4xl font-black">{formatCurrency(totalBalance)}</p>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-white rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <h2 className="text-2xl font-bold text-stone-900">رصيد الجمعية</h2>
+      <div className="bg-emerald-600 text-white p-8 rounded-3xl shadow-lg">
+        <p className="text-emerald-100 font-bold mb-2">الرصيد الكلي للجمعية (مجموع أرصدة المستخدمين)</p>
+        <p className="text-5xl font-black">{formatCurrency(totalBalance)}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-emerald-50 p-6 rounded-3xl">
+           <p className="text-emerald-800 font-bold">إجمالي المداخيل المسجلة</p>
+           <p className="text-3xl font-black text-emerald-900">{formatCurrency(totalIncome)}</p>
+        </div>
+        <div className="bg-red-50 p-6 rounded-3xl">
+           <p className="text-red-800 font-bold">إجمالي المصاريف المسجلة</p>
+           <p className="text-3xl font-black text-red-900">{formatCurrency(totalExpenses)}</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">إجمالي المداخيل المسجلة</p>
-          <p className="text-2xl font-black text-[#0088cc]">{formatCurrency(totalIncome)}</p>
+      {/* تفاصيل أرصدة كل مستخدم */}
+      <div className="pt-4 border-t border-stone-100">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+            <span>أرصدة المستخدمين</span>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+              {users.length} مستخدم
+            </span>
+          </h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-sky-100 shadow-sm">
-          <p className="text-xs font-bold text-slate-500 mb-1">إجمالي المصاريف المسجلة</p>
-          <p className="text-2xl font-black text-red-600">{formatCurrency(totalExpenses)}</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-        <h3 className="text-base font-bold text-slate-900">تفاصيل أرصدة الأعضاء والمكلفين</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {users.map(u => (
-            <div key={u.uid} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-xs text-slate-900">{u.displayName || 'بدون اسم'}</p>
-                <p className="text-[10px] text-slate-500">{u.role === 'amin' ? 'أمين المال' : u.role === 'rais' ? 'رئيس' : 'مكلف بالتحصيل'}</p>
+            <div key={u.uid} className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
+                  {u.displayName ? u.displayName.charAt(0) : (u.email ? u.email.charAt(0).toUpperCase() : '?')}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-stone-900">{u.displayName || 'بدون اسم'}</p>
+                  <p className="text-xs text-stone-500">{u.role === 'rais' ? 'رئيس' : u.role === 'amin' ? 'أمين مال' : 'مكلف بالتحصيل'}</p>
+                </div>
               </div>
-              <p className="font-black text-sm text-[#0088cc]">{formatCurrency(u.balance || 0)}</p>
+              <div className="text-left">
+                <p className="text-[11px] text-stone-400 font-bold">الرصيد</p>
+                <p className="font-black text-base text-emerald-700">{formatCurrency(u.balance || 0)}</p>
+              </div>
             </div>
           ))}
+          {users.length === 0 && (
+            <p className="text-center text-stone-400 py-6 col-span-full">لا يوجد مستخدمون مسجلون</p>
+          )}
         </div>
       </div>
     </motion.div>
   );
 }
 
-function FinancialManagementView({ 
-  sessions, 
-  expenses, 
-  subscribers, 
-  profile 
-}: { 
-  sessions: IrrigationSession[]; 
-  expenses: Expense[]; 
-  subscribers: Subscriber[]; 
-  profile: UserProfile; 
-}) {
+function FinancialManagementView({ sessions, expenses, subscribers, profile }: { sessions: IrrigationSession[], expenses: Expense[], subscribers: Subscriber[], profile: UserProfile }) {
+  const [isAddingIncome, setIsAddingIncome] = useState(false);
+  const [isEditing, setIsEditing] = useState<OtherIncome | null>(null);
   const [otherIncomes, setOtherIncomes] = useState<OtherIncome[]>([]);
 
   useEffect(() => {
@@ -2207,104 +2834,143 @@ function FinancialManagementView({
     return () => unsub();
   }, [profile.uid]);
 
+  const handleDelete = async (income: OtherIncome) => {
+    if(!confirm('هل أنت متأكد من الحذف؟')) return;
+    try {
+        await deleteDoc(doc(db, 'otherIncomes', income.id));
+        const userRef = doc(db, 'users', income.receiverUid);
+        const userDoc = await getDoc(userRef);
+        if(userDoc.exists()) {
+             const userData = userDoc.data() as UserProfile;
+             await updateDoc(userRef, { balance: userData.balance - income.amount });
+        }
+    } catch(err) {
+        console.error(err);
+        alert('خطأ أثناء الحذف');
+    }
+  }
+
   const totalOtherIncome = otherIncomes.reduce((acc, i) => acc + i.amount, 0);
-  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + (s.subscriptionFeePaid || SUBSCRIPTION_FEE), 0) + totalOtherIncome;
+  const totalIncome = sessions.filter(s => s.status === 'paid').reduce((acc, s) => acc + s.totalAmount, 0) + subscribers.reduce((acc, s) => acc + s.subscriptionFeePaid, 0) + totalOtherIncome;
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm">
-          <h3 className="font-bold text-sm text-slate-700 mb-1">مجموع المداخيل</h3>
-          <p className="text-3xl font-black text-[#0088cc]">{formatCurrency(totalIncome)}</p>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm">
-          <h3 className="font-bold text-sm text-slate-700 mb-1">مجموع المصاريف</h3>
-          <p className="text-3xl font-black text-red-600">{formatCurrency(totalExpenses)}</p>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-        <h3 className="font-bold text-base text-slate-900">المداخيل الإضافية المسجلة</h3>
-        <div className="space-y-2">
-          {otherIncomes.map(i => (
-            <div key={i.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
-              <div>
-                <p className="font-bold text-xs text-slate-900">{i.description}</p>
-                <p className="text-[10px] text-slate-500">{i.category} • {i.payerName} • {formatDate(i.date)}</p>
-              </div>
-              <p className="font-black text-sm text-[#0088cc]">{formatCurrency(i.amount)}</p>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-3xl border border-stone-200">
+                <h3 className="font-bold text-lg text-emerald-800 mb-4">مجموع المداخيل</h3>
+                <p className="text-3xl font-black mb-4">{formatCurrency(totalIncome)}</p>
+                <button 
+                  onClick={() => setIsAddingIncome(true)}
+                  className="text-xs bg-emerald-600 text-white font-bold py-2 px-4 rounded-xl hover:bg-emerald-700 transition-colors"
+                >
+                  إضافة مداخيل أخرى
+                </button>
             </div>
-          ))}
-          {otherIncomes.length === 0 && <p className="text-slate-400 text-center py-6 text-xs">لا توجد مداخيل إضافية</p>}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200">
+                <h3 className="font-bold text-lg text-red-800 mb-4">مجموع المصاريف</h3>
+                <p className="text-3xl font-black">{formatCurrency(totalExpenses)}</p>
+            </div>
         </div>
-      </div>
-    </motion.div>
+
+        {isAddingIncome && (
+          <AddOtherIncomeModal isOpen={isAddingIncome} onClose={() => setIsAddingIncome(false)} profile={profile} />
+        )}
+        {isEditing && (
+          <AddOtherIncomeModal isOpen={!!isEditing} onClose={() => setIsEditing(null)} profile={profile} income={isEditing} />
+        )}
+        
+        <div className="bg-white p-6 rounded-3xl border border-stone-200">
+           <h3 className="font-bold text-lg text-stone-800 mb-4">قائمة المداخيل الإضافية</h3>
+           <div className="space-y-2">
+             {otherIncomes.map(income => (
+               <div key={income.id} className="flex justify-between items-center p-3 bg-stone-50 rounded-xl border border-stone-100">
+                 <div>
+                   <p className="font-bold text-stone-900">{income.description}</p>
+                   <p className="text-xs text-stone-500">{income.category} - {income.payerName} - {formatDate(income.date)}</p>
+                 </div>
+                 <div className="flex items-center gap-2">
+                    <p className="font-black text-emerald-700">{formatCurrency(income.amount)}</p>
+                    <button onClick={() => setIsEditing(income)} className="p-1 hover:bg-stone-200 rounded"><PenTool className="w-4 h-4 text-stone-600"/></button>
+                    <button onClick={() => handleDelete(income)} className="p-1 hover:bg-red-100 rounded text-red-600"><Trash2 className="w-4 h-4"/></button>
+                 </div>
+               </div>
+             ))}
+             {otherIncomes.length === 0 && <p className="text-stone-400 text-center py-4">لا توجد مداخيل إضافية</p>}
+           </div>
+        </div>
+      </motion.div>
   );
 }
 
-// ==========================================
-// 9. Activity Log View
-// ==========================================
-function ActivityLogView({ 
-  users, 
-  subscribers, 
-  sessions, 
-  expenses, 
-  transfers 
-}: { 
-  users: UserProfile[]; 
-  subscribers: Subscriber[]; 
-  sessions: IrrigationSession[]; 
-  expenses: Expense[]; 
-  transfers: Transfer[]; 
-}) {
-  const activities = [
-    ...subscribers.map(s => ({ ...s, type: 'مشترك جديد', details: `${s.name} (${s.receiptNumber || `SUB-${s.id.slice(-6).toUpperCase()}`})`, date: s.subscriptionDate })),
-    ...sessions.map(s => ({ ...s, type: 'عملية سقي', details: `${s.subscriberName} - ${s.hours} ساعة (${s.receiptNumber || `IRR-${s.id.slice(-6).toUpperCase()}`})`, date: s.date })),
-    ...expenses.map(e => ({ ...e, type: 'مصاريف', details: `${e.description} (${formatCurrency(e.amount)})`, date: e.date })),
-    ...transfers.map(t => ({ ...t, type: 'تحويل رصيد', details: `مبلغ ${formatCurrency(t.amount)}`, date: t.date })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 50);
+function AddOtherIncomeModal({ isOpen, onClose, profile, income }: { isOpen: boolean, onClose: () => void, profile: UserProfile, income?: OtherIncome }) {
+  const [description, setDescription] = useState(income?.description || '');
+  const [categories, setCategories] = useState(INCOME_CATEGORIES);
+  const [category, setCategory] = useState(income?.category || INCOME_CATEGORIES[0]);
+  const [amount, setAmount] = useState(income?.amount || 0);
+  const [payerName, setPayerName] = useState(income?.payerName || '');
+  const [isAddingCat, setIsAddingCat] = useState(false);
+  const [newCat, setNewCat] = useState('');
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (income) {
+          // Update
+          const oldAmount = income.amount;
+          await updateDoc(doc(db, 'otherIncomes', income.id), {
+            description, category, amount, payerName
+          });
+          const userRef = doc(db, 'users', profile.uid);
+          await updateDoc(userRef, { balance: profile.balance - oldAmount + amount });
+      } else {
+          // Create
+          await addDoc(collection(db, 'otherIncomes'), {
+            description, category, amount, date: new Date().toISOString(), payerName,
+            receiverUid: profile.uid, createdBy: profile.uid
+          });
+          await updateDoc(doc(db, 'users', profile.uid), { balance: profile.balance + amount });
+      }
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('خطأ أثناء الحفظ');
+    }
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-      <h3 className="text-lg font-black text-slate-900">سجل العمليات والأنشطة</h3>
-      <div className="space-y-3">
-        {activities.map((a: any, i) => {
-          const user = users.find(u => u.uid === a.createdBy);
-          return (
-            <div key={i} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-xs text-slate-900">{a.type}</p>
-                  <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/60 px-2 py-0.5 rounded-md">{a.details}</span>
-                </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(a.date)}</p>
-              </div>
-              <span className="text-[11px] font-bold text-[#0077b6] bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-100 self-start sm:self-auto">
-                بواسطة: {user?.displayName || 'مستخدم'}
-              </span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8" dir="rtl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold">{income ? 'تعديل الدخل' : 'إضافة دخل إضافي'}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full text-stone-500">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSave} className="space-y-4">
+          <input type="text" placeholder="الوصف" required className="w-full p-3 border rounded-xl" value={description} onChange={e => setDescription(e.target.value)} />
+          <div className="flex gap-2">
+            <select className="flex-1 p-3 border rounded-xl" value={category} onChange={e => setCategory(e.target.value)}>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button type="button" onClick={() => setIsAddingCat(!isAddingCat)} className="px-4 py-3 bg-stone-100 rounded-xl font-bold text-stone-600 hover:bg-stone-200">+</button>
+          </div>
+          {isAddingCat && (
+            <div className="flex gap-2">
+              <input type="text" placeholder="تصنيف جديد" className="flex-1 p-3 border rounded-xl" onChange={e => setNewCat(e.target.value)} />
+              <button type="button" onClick={() => { if(newCat) { setCategories([...categories, newCat]); setCategory(newCat); setIsAddingCat(false); setNewCat(''); }}} className="px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold">حفظ</button>
             </div>
-          );
-        })}
-        {activities.length === 0 && <p className="text-center text-slate-400 py-8 text-xs">لا توجد أنشطة مسجلة</p>}
-      </div>
-    </motion.div>
+          )}
+          <input type="number" placeholder="المبلغ" required className="w-full p-3 border rounded-xl" value={amount} onChange={e => setAmount(Number(e.target.value))} />
+          <input type="text" placeholder="اسم الدافع" required className="w-full p-3 border rounded-xl" value={payerName} onChange={e => setPayerName(e.target.value)} />
+          <button className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl">{income ? 'حفظ التعديلات' : 'إضافة'}</button>
+        </form>
+      </motion.div>
+    </div>
   );
 }
 
-// ==========================================
-// 10. Settings & User Management
-// ==========================================
-function SettingsView({ 
-  users, 
-  profile, 
-  showConfirm 
-}: { 
-  users: UserProfile[]; 
-  profile?: UserProfile; 
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void;
-}) {
+function SettingsView({ users, profile, showConfirm }: { users: UserProfile[], profile?: UserProfile, showConfirm?: (title: string, message: string, onConfirm: () => void) => void }) {
   const [subFee, setSubFee] = useState(SUBSCRIPTION_FEE);
   const [irrRate, setIrrRate] = useState(IRRIGATION_RATE);
   const [workerWage, setWorkerWage] = useState(WORKER_WAGE_PER_HOUR);
@@ -2328,67 +2994,79 @@ function SettingsView({
 
   return (
     <div className="space-y-6">
-      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4 max-w-xl">
-        <h3 className="text-lg font-black text-slate-900">إعدادات التسعير وخاتم الجمعية</h3>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">الاشتراك السنوي (درهم)</label>
-            <input
-              type="number"
-              value={subFee}
-              onChange={(e) => setSubFee(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-[#0088cc] outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">ساعة السقي (درهم)</label>
-            <input
-              type="number"
-              value={irrRate}
-              onChange={(e) => setIrrRate(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-[#0088cc] outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">أجرة العامل/س (درهم)</label>
-            <input
-              type="number"
-              value={workerWage}
-              onChange={(e) => setWorkerWage(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-black text-slate-800 outline-none"
-            />
-          </div>
-        </div>
-
+      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6 max-w-lg">
+        <h3 className="text-xl font-bold text-stone-900">إعدادات الجمعية والتوقيع الرسمية</h3>
         <div>
-          <label className="block text-xs font-bold text-slate-700 mb-1">خاتم / توقيع الجمعية (للطباعة في الوصل)</label>
+          <label className="block text-sm font-bold text-stone-700 mb-2">ثمن الاشتراك السنوي (درهم)</label>
+          <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={subFee} onChange={(e) => setSubFee(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">ثمن سقي الساعة (درهم)</label>
+          <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={irrRate} onChange={(e) => setIrrRate(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">أجرة العامل في الساعة (درهم)</label>
+          <input type="number" className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl" value={workerWage} onChange={(e) => setWorkerWage(Number(e.target.value))} />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-stone-700 mb-2">توقيع / خاتم الجمعية الرسمية (للطباعة في الوصل)</label>
           <div className="flex items-center gap-2">
-            <input
-              type="text"
-              dir="ltr"
-              value={assocSignature}
-              onChange={(e) => setAssocSignature(e.target.value)}
-              placeholder="رابط أو اختر صورة"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none"
+            <input 
+              type="text" 
+              className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl dir-ltr font-mono text-xs" 
+              placeholder="رابط أو اختر صورة الخاتم"
+              value={assocSignature} 
+              onChange={(e) => setAssocSignature(e.target.value)} 
             />
+            <label className="cursor-pointer px-3 py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1 transition-colors">
+              <Upload className="w-4 h-4 text-emerald-700" />
+              <span>رفع</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      if (event.target?.result) {
+                        setAssocSignature(event.target.result as string);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                className="hidden" 
+              />
+            </label>
             <button
               type="button"
               onClick={() => setIsSigPadOpen(true)}
-              className="px-3 py-2 bg-sky-50 hover:bg-sky-100 text-[#0077b6] text-xs font-bold rounded-xl border border-sky-200 shrink-0 flex items-center gap-1"
+              className="px-3 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl border border-stone-200 shrink-0 flex items-center gap-1 transition-colors"
             >
-              <PenTool className="w-4 h-4" />
+              <PenTool className="w-4 h-4 text-stone-700" />
               <span>رسم</span>
             </button>
           </div>
+          {assocSignature && (
+            <div className="mt-2 p-2 bg-stone-50 border border-stone-200 rounded-xl flex items-center gap-3">
+              <img 
+                src={assocSignature} 
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                alt="خاتم الجمعية" 
+                className="h-12 w-12 object-contain border border-stone-300 rounded p-1 bg-white" 
+              />
+              <span className="text-xs text-stone-500 font-medium">معاينة خاتم/توقيع الجمعية الرسمية</span>
+            </div>
+          )}
         </div>
-
-        <button
+        <button 
           onClick={handleSave}
           disabled={saving}
-          className="w-full py-3 bg-[#0088cc] hover:bg-[#0077b6] text-white font-black text-xs rounded-xl shadow-md shadow-sky-200 transition-all cursor-pointer"
+          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all"
         >
-          {saving ? 'جاري الحفظ...' : 'حفظ الإعدادات'}
+          {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </button>
       </motion.div>
 
@@ -2398,204 +3076,144 @@ function SettingsView({
         onSave={(dataUrl) => setAssocSignature(dataUrl)}
         title="رسم خاتم / توقيع الجمعية"
       />
-
       <UserManagementView users={users} profile={profile} showConfirm={showConfirm} />
     </div>
   );
 }
 
-function UserManagementView({ 
-  users, 
-  profile, 
-  showConfirm 
-}: { 
-  users: UserProfile[]; 
-  profile?: UserProfile; 
-  showConfirm?: (title: string, message: string, onConfirm: () => void) => void;
-}) {
-  const isAmin = profile?.role === 'amin';
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newDisplayName, setNewDisplayName] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('mukallaf');
-  const [newSignatureUrl, setNewSignatureUrl] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [addError, setAddError] = useState('');
-  const [addSuccess, setAddSuccess] = useState('');
+function TransfersView({ users, transfers, profile }: { users: UserProfile[], transfers: Transfer[], profile: UserProfile }) {
+  const [amount, setAmount] = useState(0);
+  const [toUid, setToUid] = useState('');
 
-  const handleCreateUser = async (e: React.FormEvent) => {
+  const handleTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAddError('');
-    setAddSuccess('');
+    if (!toUid || amount <= 0 || amount > profile.balance) return;
 
-    if (!newEmail.trim() || !newPassword || !newDisplayName.trim()) {
-      setAddError('يرجى ملء جميع الحقول المطلوبة');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
-      const newUser = await createNewUserAccount(newEmail.trim(), newPassword);
-      const newProfile: UserProfile = {
-        uid: newUser.uid,
-        email: newEmail.trim().toLowerCase(),
-        displayName: newDisplayName.trim(),
-        role: newRole,
-        signatureUrl: newSignatureUrl.trim(),
-        allowedTabs: newRole === 'amin' 
-          ? ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity', 'balance', 'financial'] 
-          : ['dashboard', 'subscribers', 'irrigation', 'expenses', 'reports', 'transfers', 'activity', 'balance', 'financial'],
-        balance: 0
-      };
+      // 1. Create transfer record
+      await addDoc(collection(db, 'transfers'), {
+        fromUid: profile.uid,
+        toUid,
+        amount,
+        date: new Date().toISOString(),
+        createdBy: profile.uid
+      });
 
-      await setDoc(doc(db, 'users', newUser.uid), newProfile);
-      setAddSuccess(`تم إنشاء الحساب بنجاح للمستخدم "${newDisplayName}"`);
-      setTimeout(() => {
-        setIsAddModalOpen(false);
-        setAddSuccess('');
-      }, 1500);
-    } catch (err: any) {
-      console.error(err);
-      setAddError('تعذر إنشاء الحساب. قد يكون البريد الإلكتروني مسجلاً مسبقاً.');
-    } finally {
-      setIsSubmitting(false);
+      // 2. Update sender balance
+      await updateDoc(doc(db, 'users', profile.uid), {
+        balance: profile.balance - amount
+      });
+
+      // 3. Update receiver balance
+      const receiver = users.find(u => u.uid === toUid);
+      if (receiver) {
+        await updateDoc(doc(db, 'users', toUid), {
+          balance: (receiver.balance || 0) + amount
+        });
+      }
+
+      setAmount(0);
+      setToUid('');
+      alert('تم تحويل المبلغ بنجاح');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'transfers');
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-sky-100 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-        <div>
-          <h3 className="text-base font-black text-slate-900">إدارة الأعضاء والمكلفين</h3>
-          <p className="text-xs text-slate-500">التحكم في أدوار وصلاحيات وتواقيع المكلفين</p>
-        </div>
-        {isAmin && (
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-[#0088cc] hover:bg-[#0077b6] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة مستخدم جديد</span>
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        {users.map(u => (
-          <div key={u.uid} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+    >
+      <div className="lg:col-span-1">
+        <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm">
+          <h3 className="text-xl font-bold text-stone-900 mb-6">تحويل رصيد جديد</h3>
+          <form onSubmit={handleTransfer} className="space-y-6">
+            <div className="bg-stone-50 p-4 rounded-2xl mb-4">
+              <p className="text-xs text-stone-500 mb-1">رصيدك المتاح للتحويل:</p>
+              <p className="text-2xl font-bold text-emerald-600">{formatCurrency(profile.balance)}</p>
+            </div>
+            
             <div>
-              <p className="font-bold text-xs text-slate-900">{u.displayName || 'بدون اسم'}</p>
-              <p className="text-[10px] text-slate-500 font-mono">{u.email} • {u.role === 'amin' ? 'أمين المال' : u.role === 'rais' ? 'رئيس' : 'مكلف بالتحصيل'}</p>
+              <label className="block text-sm font-bold text-stone-700 mb-2">تحويل إلى</label>
+              <select 
+                required
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                value={toUid}
+                onChange={(e) => setToUid(e.target.value)}
+              >
+                <option value="">-- اختر مستلم --</option>
+                {users.filter(u => u.uid !== profile.uid).map(u => (
+                  <option key={u.uid} value={u.uid}>{u.displayName} ({u.role === 'amin' ? 'أمين المال' : 'مكلف'})</option>
+                ))}
+              </select>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#0088cc] px-3 py-1 bg-sky-50 rounded-lg border border-sky-100">
-                الرصيد: {formatCurrency(u.balance || 0)}
-              </span>
-              {isAmin && u.email?.toLowerCase() !== 'amriahassan@gmail.com' && (
-                <button
-                  onClick={() => {
-                    showConfirm?.('حذف المستخدم', `هل أنت متأكد من حذف الحساب "${u.displayName || u.email}"؟`, async () => {
-                      try {
-                        await deleteDoc(doc(db, 'users', u.uid));
-                      } catch (err) {
-                        console.error(err);
-                      }
-                    });
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"
-                  title="حذف الحساب"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
+
+            <div>
+              <label className="block text-sm font-bold text-stone-700 mb-2">المبلغ المراد تحويله</label>
+              <div className="relative">
+                <input 
+                  required
+                  type="number" 
+                  max={profile.balance}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500"
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                />
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-stone-400">درهم</span>
+              </div>
             </div>
-          </div>
-        ))}
+
+            <button 
+              type="submit"
+              disabled={amount <= 0 || amount > profile.balance}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <Send className="w-5 h-5" />
+              تأكيد التحويل
+            </button>
+          </form>
+        </div>
       </div>
 
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 text-right space-y-4" dir="rtl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h3 className="text-base font-bold text-slate-900">إضافة مستخدم جديد</h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-1 hover:bg-slate-100 rounded-full">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <div className="lg:col-span-2">
+        <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm h-full">
+          <h3 className="text-xl font-bold text-stone-900 mb-6">سجل التحويلات</h3>
+          <div className="space-y-4">
+            {transfers.map(transfer => {
+              const fromUser = users.find(u => u.uid === transfer.fromUid);
+              const toUser = users.find(u => u.uid === transfer.toUid);
+              const isSender = transfer.fromUid === profile.uid;
 
-            {addError && <p className="p-2.5 bg-red-50 text-red-600 rounded-xl text-xs font-bold">{addError}</p>}
-            {addSuccess && <p className="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-bold">{addSuccess}</p>}
-
-            <form onSubmit={handleCreateUser} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الاسم الكامل *</label>
-                <input
-                  type="text"
-                  required
-                  value={newDisplayName}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني *</label>
-                <input
-                  type="email"
-                  required
-                  dir="ltr"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور *</label>
-                <input
-                  type="password"
-                  required
-                  dir="ltr"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الدور والصلاحية</label>
-                <select
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold"
-                >
-                  <option value="mukallaf">مكلف بالتحصيل والسقي</option>
-                  <option value="rais">رئيس الجمعية</option>
-                  <option value="amin">أمين المال</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 bg-[#0088cc] hover:bg-[#0077b6] text-white text-xs font-bold rounded-xl shadow-sm"
-                >
-                  {isSubmitting ? 'جاري الإنشاء...' : 'إنشاء الحساب'}
-                </button>
-              </div>
-            </form>
+              return (
+                <div key={transfer.id} className="flex items-center justify-between p-4 bg-stone-50 rounded-2xl border border-stone-100">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSender ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                      {isSender ? <ArrowRightLeft className="w-5 h-5 rotate-180" /> : <ArrowRightLeft className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <p className="font-bold text-stone-900">
+                        {isSender ? `إلى: ${toUser?.displayName}` : `من: ${fromUser?.displayName}`}
+                      </p>
+                      <p className="text-xs text-stone-500">{formatDate(transfer.date)}</p>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <p className={`font-bold text-lg ${isSender ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {isSender ? '-' : '+'}{formatCurrency(transfer.amount)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+            {transfers.length === 0 && <p className="text-center text-stone-400 py-12">لا توجد تحويلات مسجلة</p>}
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </motion.div>
   );
 }
+
+
+

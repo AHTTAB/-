@@ -1,6 +1,5 @@
 {
   "name": "نظام تسيير جمعية مياه السقي",
-  "description": "تطبيق متكامل لتسيير جمعية مياه السقي، يشمل إدارة المشتركين، حصص السقي، المصاريف، والتقارير المالية والطباعة الحرارية عبر RawBT.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "description": "تطبيق متكامل لتسيير جمعية مياه السقي، يشمل إدارة المشتركين، حصص السقي، المصاريف، والتقارير المالية.",
+  "requestFramePermissions": []
 }
